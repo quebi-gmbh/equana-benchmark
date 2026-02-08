@@ -1,0 +1,121 @@
+import type { BenchmarkVariant } from './types';
+
+export const BENCHMARKS: BenchmarkVariant[] = [
+  // JavaScript implementations
+  {
+    id: 'js-naive-array',
+    name: 'JS Naive (number[])',
+    category: 'javascript',
+    description: 'Baseline triple-loop — worst case for V8 JIT',
+    runner: 'js',
+    config: { fn: 'naiveArray', inputType: 'array' },
+  },
+  {
+    id: 'js-naive-float64',
+    name: 'JS Naive (Float64Array)',
+    category: 'javascript',
+    description: 'Typed arrays — better JIT optimization',
+    runner: 'js',
+    config: { fn: 'naiveFloat64', inputType: 'float64' },
+  },
+  {
+    id: 'js-cache-array',
+    name: 'JS Cache-Opt (number[])',
+    category: 'javascript',
+    description: '64x64 loop tiling for cache locality',
+    runner: 'js',
+    config: { fn: 'cacheArray', inputType: 'array' },
+  },
+  {
+    id: 'js-packed-array',
+    name: 'JS Packed 4x4 (number[])',
+    category: 'javascript',
+    description: 'DGEMM-style: 3-level blocking + packing + 4x4 micro-kernel',
+    runner: 'js',
+    config: { fn: 'packedArray', inputType: 'array' },
+  },
+
+  // WASM implementations (single-threaded)
+  {
+    id: 'wasm-naive',
+    name: 'WASM Naive',
+    category: 'wasm',
+    description: 'Triple-loop compiled to WebAssembly',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_naive.wasm', funcName: 'matmul_naive' },
+  },
+  {
+    id: 'wasm-cache',
+    name: 'WASM Cache',
+    category: 'wasm',
+    description: '64x64 cache blocking, no SIMD',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_cache.wasm', funcName: 'matmul_cache' },
+  },
+  {
+    id: 'wasm-simd',
+    name: 'WASM SIMD',
+    category: 'wasm',
+    description: 'f64x2 SIMD vectors without cache blocking',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_simd.wasm', funcName: 'matmul_simd' },
+  },
+  {
+    id: 'wasm-full-4x4',
+    name: 'WASM Full 4x4',
+    category: 'wasm',
+    description: 'Cache + SIMD + packing — optimal for WASM registers',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_full_4x4.wasm', funcName: 'matmul_f64' },
+  },
+  {
+    id: 'wasm-full-6x8',
+    name: 'WASM Full 6x8',
+    category: 'wasm',
+    description: '24 f64x2 accumulators — common BLAS size',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_full_6x8.wasm', funcName: 'matmul_f64_6x8' },
+  },
+  {
+    id: 'wasm-full-8x8',
+    name: 'WASM Full 8x8',
+    category: 'wasm',
+    description: '32 f64x2 accumulators — register spilling risk',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_full_8x8.wasm', funcName: 'matmul_f64_8x8' },
+  },
+  {
+    id: 'wasm-openblas',
+    name: 'WASM OpenBLAS',
+    category: 'wasm',
+    description: 'OpenBLAS DGEMM compiled to WASM',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_openblas.wasm', funcName: 'matmul_openblas' },
+  },
+  {
+    id: 'wasm-sse',
+    name: 'WASM SSE-style',
+    category: 'wasm',
+    description: 'SSE-style lane duplication approach in WASM',
+    runner: 'wasm',
+    config: { wasmFile: 'matmul_sse.wasm', funcName: 'matmul_sse' },
+  },
+
+  // Multi-threaded WASM implementations
+  {
+    id: 'wasm-mt',
+    name: 'WASM Full 4x4 MT',
+    category: 'wasm-mt',
+    description: 'Multi-threaded Full 4x4 with pthreads',
+    runner: 'mt',
+    config: { moduleId: 'matmul_mt', funcName: 'matmul_f64_mt' },
+  },
+  {
+    id: 'wasm-sse-mt',
+    name: 'WASM SSE-style MT',
+    category: 'wasm-mt',
+    description: 'Multi-threaded SSE-style lane duplication',
+    runner: 'mt',
+    config: { moduleId: 'matmul_sse_mt', funcName: 'matmul_sse_mt' },
+  },
+];

@@ -1,24 +1,18 @@
 {
-  "name": "Dev Container Template",
+  "name": "Equana benchmark (native fs)",
   "image": "mcr.microsoft.com/devcontainers/typescript-node",
   "remoteUser": "node",
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
   "customizations": {
     "vscode": {
-      "extensions": [
-        "anthropic.claude-code",
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode"
-      ],
+      "extensions": ["anthropic.claude-code", "biomejs.biome"],
       "settings": {
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
         "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
-  },
-  "initializeCommand": "REPO=$(basename \"$PWD\") && mkdir -p \"$HOME/.claude/$REPO\" && [ ! -f \"$HOME/.claude/$REPO/.claude.json\" ] && cp -rn \"$HOME/.claude/\"* \"$HOME/.claude/$REPO/\" 2>/dev/null && cp -n \"$HOME/.claude.json\" \"$HOME/.claude/$REPO/.claude.json\" 2>/dev/null; true",
+    },
   "features": {
     "ghcr.io/devcontainers/features/github-cli:1": {},
     /*
@@ -26,11 +20,15 @@
       "installZsh": "true",
       "upgradePackages": "true"
     },*/
-    "ghcr.io/devcontainers/features/git:1": {}
-    /*
-    "ghcr.io/joedmck/devcontainer-features/wrangler:1": {
-      "version": "latest"
-    }*/
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    },
+    "ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    },
+    "ghcr.io/devcontainers-extra/features/cmake:1": {}
   },
   /* Install additional packages
   "postCreateCommand": "echo 'Post-create command executed!'",
@@ -41,9 +39,8 @@
   },*/
   "mounts": [
     // change user "node" if needed, e.g. "vscode" for ubuntu-based images
-    // mount Claude credentials (per-repo)
-    "source=${localEnv:HOME}/.claude/${localWorkspaceFolderBasename},target=/home/node/.claude,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.claude/${localWorkspaceFolderBasename}/.claude.json,target=/home/node/.claude.json,type=bind,consistency=cached",
+    // mount Claude credentials
+    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached",
     // mount GitHub CLI config
     "source=${localEnv:HOME}/.config/gh,target=/home/node/.config/gh,type=bind",
     // mount Git config
