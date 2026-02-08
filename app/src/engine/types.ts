@@ -1,5 +1,5 @@
-export type Category = 'javascript' | 'wasm' | 'wasm-mt';
-export type RunnerType = 'js' | 'wasm' | 'mt';
+export type Category = 'javascript' | 'wasm' | 'wasm-mt' | 'pyodide';
+export type RunnerType = 'js' | 'wasm' | 'mt' | 'pyodide';
 
 export interface JsConfig {
   fn: 'naiveArray' | 'naiveFloat64' | 'cacheArray' | 'packedArray';
@@ -16,13 +16,17 @@ export interface MtConfig {
   funcName: string;
 }
 
+export interface PyodideConfig {
+  _tag: 'pyodide';
+}
+
 export interface BenchmarkVariant {
   id: string;
   name: string;
   category: Category;
   description: string;
   runner: RunnerType;
-  config: JsConfig | WasmConfig | MtConfig;
+  config: JsConfig | WasmConfig | MtConfig | PyodideConfig;
 }
 
 export interface BenchmarkResult {

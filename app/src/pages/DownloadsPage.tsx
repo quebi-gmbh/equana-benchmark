@@ -1,4 +1,5 @@
 import { PlatformTabs } from '../components/PlatformTabs';
+import { ReferenceResultsSection } from '../components/ReferenceResultsSection';
 
 const REPO = 'https://github.com/quebi-gmbh/equana-benchmark';
 const BLOB = `${REPO}/blob/main/matmul-benchmarks`;
@@ -94,6 +95,9 @@ export function DownloadsPage() {
         </p>
         <PlatformTabs />
       </section>
+
+      {/* Reference Results */}
+      <ReferenceResultsSection />
     </div>
   );
 }

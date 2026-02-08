@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WASM MatMul Optimization Benchmark</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+            max-width: 1000px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #00d4ff; }
+        h2 { color: #00d4ff; margin-top: 30px; }
+        button {
+            background: #00d4ff;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            cursor: pointer;
+            margin: 5px;
+            border-radius: 4px;
+        }
+        button:hover { background: #00b8e6; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #output {
+            background: #0d0d1a;
+            border: 1px solid #333;
+            padding: 20px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 13px;
+            max-height: 700px;
+            overflow-y: auto;
+        }
+        .result { color: #00ff88; font-weight: bold; }
+        .warn { color: #ff6b6b; }
+        .info { color: #888; }
+        .highlight { color: #ffcc00; font-weight: bold; }
+        select {
+            background: #0d0d1a;
+            color: #eee;
+            border: 1px solid #333;
+            padding: 8px;
+            margin: 5px;
+        }
+        .section {
+            margin: 10px 0;
+            padding: 15px;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MatMul Optimization Benchmark</h1>
+    <p>Comparing JS naive (number[] & Float64Array) and WASM implementations</p>
+
+    <div class="section">
+        <label>Matrix Size (N×N):
+            <select id="size">
+                <option value="128">128</option>
+                <option value="256">256</option>
+                <option value="512" selected>512</option>
+                <option value="750">750</option>
+                <option value="1000">1000</option>
+                <option value="1500">1500</option>
+                <option value="2000">2000</option>
+            </select>
+        </label>
+        <label>Rounds:
+            <select id="rounds">
+                <option value="1">1</option>
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+            </select>
+        </label>
+        <button onclick="runBenchmark()">Run Full Benchmark</button>
+        <button onclick="clearLog()">Clear</button>
+    </div>
+
+    <div id="output"><span class="info">Click "Run Full Benchmark" to start...</span></div>
+
+    <script>
+        // Logging utilities
+        function log(msg, cls = '') {
+            const output = document.getElementById('output');
+            if (cls) {
+                output.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+            } else {
+                output.innerHTML += msg + '\n';
+            }
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        // ============================================================
+        // JavaScript Naive Implementations
+        // ============================================================
+
+        /**
+         * Naive matmul using number[] (JS arrays)
+         * This is the slowest - V8 can't optimize well due to type uncertainty
+         */
+        function matmulNaiveArray(A, B, N) {
+            const C = new Array(N * N);
+            for (let i = 0; i < N * N; i++) C[i] = 0;
+
+            for (let i = 0; i < N; i++) {
+                for (let j = 0; j < N; j++) {
+                    let sum = 0;
+                    for (let k = 0; k < N; k++) {
+                        sum += A[i * N + k] * B[k * N + j];
+                    }
+                    C[i * N + j] = sum;
+                }
+            }
+            return C;
+        }
+
+        /**
+         * Naive matmul using Float64Array
+         * Faster than number[] due to typed array optimizations
+         */
+        function matmulNaiveFloat64(A, B, N) {
+            const C = new Float64Array(N * N);
+
+            for (let i = 0; i < N; i++) {
+                for (let j = 0; j < N; j++) {
+                    let sum = 0;
+                    for (let k = 0; k < N; k++) {
+                        sum += A[i * N + k] * B[k * N + j];
+                    }
+                    C[i * N + j] = sum;
+                }
+            }
+            return C;
+        }
+
+        /**
+         * Cache-optimized matmul using number[] (loop tiling)
+         * Block size tuned for typical L1 cache
+         */
+        function matmulCacheArray(A, B, N) {
+            const BLOCK = 64;
+            const C = new Array(N * N);
+            for (let i = 0; i < N * N; i++) C[i] = 0;
+
+            // Blocked/tiled loops: jj, kk, ii ordering
+            for (let jj = 0; jj < N; jj += BLOCK) {
+                const jEnd = Math.min(jj + BLOCK, N);
+                for (let kk = 0; kk < N; kk += BLOCK) {
+                    const kEnd = Math.min(kk + BLOCK, N);
+                    for (let ii = 0; ii < N; ii += BLOCK) {
+                        const iEnd = Math.min(ii + BLOCK, N);
+                        // Micro-block
+                        for (let i = ii; i < iEnd; i++) {
+                            for (let k = kk; k < kEnd; k++) {
+                                const aik = A[i * N + k];
+                                for (let j = jj; j < jEnd; j++) {
+                                    C[i * N + j] += aik * B[k * N + j];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return C;
+        }
+
+        /**
+         * Cache-optimized matmul using Float64Array (loop tiling)
+         * Block size tuned for typical L1 cache
+         */
+        function matmulCacheFloat64(A, B, N) {
+            const BLOCK = 64;
+            const C = new Float64Array(N * N);
+
+            // Blocked/tiled loops: jj, kk, ii ordering
+            for (let jj = 0; jj < N; jj += BLOCK) {
+                const jEnd = Math.min(jj + BLOCK, N);
+                for (let kk = 0; kk < N; kk += BLOCK) {
+                    const kEnd = Math.min(kk + BLOCK, N);
+                    for (let ii = 0; ii < N; ii += BLOCK) {
+                        const iEnd = Math.min(ii + BLOCK, N);
+                        // Micro-block
+                        for (let i = ii; i < iEnd; i++) {
+                            for (let k = kk; k < kEnd; k++) {
+                                const aik = A[i * N + k];
+                                for (let j = jj; j < jEnd; j++) {
+                                    C[i * N + j] += aik * B[k * N + j];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return C;
+        }
+
+        // ============================================================
+        // JavaScript Packed DGEMM Implementations (like BLAS)
+        // ============================================================
+
+        /**
+         * Full DGEMM-style matmul with packing using number[]
+         * - 3-level blocking (MC, KC, NC)
+         * - Panel packing for sequential memory access
+         * - 4x4 micro-kernel with register blocking
+         */
+        function matmulPackedArray(A, B, N) {
+            const MC = 64, KC = 128, NC = 256;
+            const MR = 4, NR = 4;
+
+            const C = new Array(N * N);
+            for (let i = 0; i < N * N; i++) C[i] = 0;
+
+            // Pre-allocate packing buffers
+            const packA = new Array((MC + MR) * (KC + 4));
+            const packB = new Array((KC + 4) * (NC + NR));
+
+            // Pack A panel: A[ic:ic+mc, pc:pc+kc] into MR-strided format
+            function packPanelA(ic, mc, pc, kc) {
+                let pa = 0;
+                for (let i = ic; i < ic + mc - MR + 1; i += MR) {
+                    for (let k = pc; k < pc + kc; k++) {
+                        // Pack MR rows for this k
+                        packA[pa++] = A[i * N + k];
+                        packA[pa++] = A[(i + 1) * N + k];
+                        packA[pa++] = A[(i + 2) * N + k];
+                        packA[pa++] = A[(i + 3) * N + k];
+                    }
+                }
+                // Handle remainder rows
+                const iRem = ic + mc - ((ic + mc) % MR || MR);
+                if (iRem < ic + mc) {
+                    const mr = ic + mc - iRem;
+                    for (let k = pc; k < pc + kc; k++) {
+                        for (let ii = 0; ii < mr; ii++) {
+                            packA[pa++] = A[(iRem + ii) * N + k];
+                        }
+                        for (let ii = mr; ii < MR; ii++) {
+                            packA[pa++] = 0;
+                        }
+                    }
+                }
+            }
+
+            // Pack B panel: B[pc:pc+kc, jc:jc+nc] into NR-strided format
+            function packPanelB(pc, kc, jc, nc) {
+                let pb = 0;
+                for (let j = jc; j < jc + nc - NR + 1; j += NR) {
+                    for (let k = pc; k < pc + kc; k++) {
+                        // Pack NR cols for this k
+                        packB[pb++] = B[k * N + j];
+                        packB[pb++] = B[k * N + j + 1];
+                        packB[pb++] = B[k * N + j + 2];
+                        packB[pb++] = B[k * N + j + 3];
+                    }
+                }
+                // Handle remainder cols
+                const jRem = jc + nc - ((jc + nc) % NR || NR);
+                if (jRem < jc + nc) {
+                    const nr = jc + nc - jRem;
+                    for (let k = pc; k < pc + kc; k++) {
+                        for (let jj = 0; jj < nr; jj++) {
+                            packB[pb++] = B[k * N + jRem + jj];
+                        }
+                        for (let jj = nr; jj < NR; jj++) {
+                            packB[pb++] = 0;
+                        }
+                    }
+                }
+            }
+
+            // 4x4 micro-kernel operating on packed data
+            function microKernel4x4(pa, pb, kc, cBase, ldc) {
+                let c00 = 0, c01 = 0, c02 = 0, c03 = 0;
+                let c10 = 0, c11 = 0, c12 = 0, c13 = 0;
+                let c20 = 0, c21 = 0, c22 = 0, c23 = 0;
+                let c30 = 0, c31 = 0, c32 = 0, c33 = 0;
+
+                for (let k = 0; k < kc; k++) {
+                    const a0 = packA[pa], a1 = packA[pa + 1], a2 = packA[pa + 2], a3 = packA[pa + 3];
+                    const b0 = packB[pb], b1 = packB[pb + 1], b2 = packB[pb + 2], b3 = packB[pb + 3];
+
+                    c00 += a0 * b0; c01 += a0 * b1; c02 += a0 * b2; c03 += a0 * b3;
+                    c10 += a1 * b0; c11 += a1 * b1; c12 += a1 * b2; c13 += a1 * b3;
+                    c20 += a2 * b0; c21 += a2 * b1; c22 += a2 * b2; c23 += a2 * b3;
+                    c30 += a3 * b0; c31 += a3 * b1; c32 += a3 * b2; c33 += a3 * b3;
+
+                    pa += MR;
+                    pb += NR;
+                }
+
+                // Accumulate to C (row-major)
+                C[cBase] += c00; C[cBase + 1] += c01; C[cBase + 2] += c02; C[cBase + 3] += c03;
+                C[cBase + ldc] += c10; C[cBase + ldc + 1] += c11; C[cBase + ldc + 2] += c12; C[cBase + ldc + 3] += c13;
+                C[cBase + 2 * ldc] += c20; C[cBase + 2 * ldc + 1] += c21; C[cBase + 2 * ldc + 2] += c22; C[cBase + 2 * ldc + 3] += c23;
+                C[cBase + 3 * ldc] += c30; C[cBase + 3 * ldc + 1] += c31; C[cBase + 3 * ldc + 2] += c32; C[cBase + 3 * ldc + 3] += c33;
+            }
+
+            // Edge micro-kernel for partial tiles
+            function microKernelEdge(pa, pb, mr, nr, kc, cBase, ldc) {
+                for (let i = 0; i < mr; i++) {
+                    for (let j = 0; j < nr; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < kc; k++) {
+                            sum += packA[pa + k * MR + i] * packB[pb + k * NR + j];
+                        }
+                        C[cBase + i * ldc + j] += sum;
+                    }
+                }
+            }
+
+            // Main GEBP loops
+            for (let jc = 0; jc < N; jc += NC) {
+                const nc = Math.min(NC, N - jc);
+
+                for (let pc = 0; pc < N; pc += KC) {
+                    const kc = Math.min(KC, N - pc);
+
+                    // Pack B panel
+                    packPanelB(pc, kc, jc, nc);
+
+                    for (let ic = 0; ic < N; ic += MC) {
+                        const mc = Math.min(MC, N - ic);
+
+                        // Pack A panel
+                        packPanelA(ic, mc, pc, kc);
+
+                        // Macro kernel: multiply packed panels
+                        for (let jr = 0; jr < nc; jr += NR) {
+                            const nr = Math.min(NR, nc - jr);
+                            for (let ir = 0; ir < mc; ir += MR) {
+                                const mr = Math.min(MR, mc - ir);
+                                const pa = ir * kc;
+                                const pb = jr * kc;
+                                const cBase = (ic + ir) * N + (jc + jr);
+
+                                if (mr === MR && nr === NR) {
+                                    microKernel4x4(pa, pb, kc, cBase, N);
+                                } else {
+                                    microKernelEdge(pa, pb, mr, nr, kc, cBase, N);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return C;
+        }
+
+        /**
+         * Full DGEMM-style matmul with packing using Float64Array
+         */
+        function matmulPackedFloat64(A, B, N) {
+            const MC = 64, KC = 128, NC = 256;
+            const MR = 4, NR = 4;
+
+            const C = new Float64Array(N * N);
+
+            // Pre-allocate packing buffers as typed arrays
+            const packA = new Float64Array((MC + MR) * (KC + 4));
+            const packB = new Float64Array((KC + 4) * (NC + NR));
+
+            function packPanelA(ic, mc, pc, kc) {
+                let pa = 0;
+                for (let i = ic; i < ic + mc - MR + 1; i += MR) {
+                    for (let k = pc; k < pc + kc; k++) {
+                        packA[pa++] = A[i * N + k];
+                        packA[pa++] = A[(i + 1) * N + k];
+                        packA[pa++] = A[(i + 2) * N + k];
+                        packA[pa++] = A[(i + 3) * N + k];
+                    }
+                }
+                const iRem = ic + mc - ((ic + mc) % MR || MR);
+                if (iRem < ic + mc) {
+                    const mr = ic + mc - iRem;
+                    for (let k = pc; k < pc + kc; k++) {
+                        for (let ii = 0; ii < mr; ii++) {
+                            packA[pa++] = A[(iRem + ii) * N + k];
+                        }
+                        for (let ii = mr; ii < MR; ii++) {
+                            packA[pa++] = 0;
+                        }
+                    }
+                }
+            }
+
+            function packPanelB(pc, kc, jc, nc) {
+                let pb = 0;
+                for (let j = jc; j < jc + nc - NR + 1; j += NR) {
+                    for (let k = pc; k < pc + kc; k++) {
+                        packB[pb++] = B[k * N + j];
+                        packB[pb++] = B[k * N + j + 1];
+                        packB[pb++] = B[k * N + j + 2];
+                        packB[pb++] = B[k * N + j + 3];
+                    }
+                }
+                const jRem = jc + nc - ((jc + nc) % NR || NR);
+                if (jRem < jc + nc) {
+                    const nr = jc + nc - jRem;
+                    for (let k = pc; k < pc + kc; k++) {
+                        for (let jj = 0; jj < nr; jj++) {
+                            packB[pb++] = B[k * N + jRem + jj];
+                        }
+                        for (let jj = nr; jj < NR; jj++) {
+                            packB[pb++] = 0;
+                        }
+                    }
+                }
+            }
+
+            function microKernel4x4(pa, pb, kc, cBase, ldc) {
+                let c00 = 0, c01 = 0, c02 = 0, c03 = 0;
+                let c10 = 0, c11 = 0, c12 = 0, c13 = 0;
+                let c20 = 0, c21 = 0, c22 = 0, c23 = 0;
+                let c30 = 0, c31 = 0, c32 = 0, c33 = 0;
+
+                for (let k = 0; k < kc; k++) {
+                    const a0 = packA[pa], a1 = packA[pa + 1], a2 = packA[pa + 2], a3 = packA[pa + 3];
+                    const b0 = packB[pb], b1 = packB[pb + 1], b2 = packB[pb + 2], b3 = packB[pb + 3];
+
+                    c00 += a0 * b0; c01 += a0 * b1; c02 += a0 * b2; c03 += a0 * b3;
+                    c10 += a1 * b0; c11 += a1 * b1; c12 += a1 * b2; c13 += a1 * b3;
+                    c20 += a2 * b0; c21 += a2 * b1; c22 += a2 * b2; c23 += a2 * b3;
+                    c30 += a3 * b0; c31 += a3 * b1; c32 += a3 * b2; c33 += a3 * b3;
+
+                    pa += MR;
+                    pb += NR;
+                }
+
+                C[cBase] += c00; C[cBase + 1] += c01; C[cBase + 2] += c02; C[cBase + 3] += c03;
+                C[cBase + ldc] += c10; C[cBase + ldc + 1] += c11; C[cBase + ldc + 2] += c12; C[cBase + ldc + 3] += c13;
+                C[cBase + 2 * ldc] += c20; C[cBase + 2 * ldc + 1] += c21; C[cBase + 2 * ldc + 2] += c22; C[cBase + 2 * ldc + 3] += c23;
+                C[cBase + 3 * ldc] += c30; C[cBase + 3 * ldc + 1] += c31; C[cBase + 3 * ldc + 2] += c32; C[cBase + 3 * ldc + 3] += c33;
+            }
+
+            function microKernelEdge(pa, pb, mr, nr, kc, cBase, ldc) {
+                for (let i = 0; i < mr; i++) {
+                    for (let j = 0; j < nr; j++) {
+                        let sum = 0;
+                        for (let k = 0; k < kc; k++) {
+                            sum += packA[pa + k * MR + i] * packB[pb + k * NR + j];
+                        }
+                        C[cBase + i * ldc + j] += sum;
+                    }
+                }
+            }
+
+            for (let jc = 0; jc < N; jc += NC) {
+                const nc = Math.min(NC, N - jc);
+
+                for (let pc = 0; pc < N; pc += KC) {
+                    const kc = Math.min(KC, N - pc);
+
+                    packPanelB(pc, kc, jc, nc);
+
+                    for (let ic = 0; ic < N; ic += MC) {
+                        const mc = Math.min(MC, N - ic);
+
+                        packPanelA(ic, mc, pc, kc);
+
+                        for (let jr = 0; jr < nc; jr += NR) {
+                            const nr = Math.min(NR, nc - jr);
+                            for (let ir = 0; ir < mc; ir += MR) {
+                                const mr = Math.min(MR, mc - ir);
+                                const pa = ir * kc;
+                                const pb = jr * kc;
+                                const cBase = (ic + ir) * N + (jc + jr);
+
+                                if (mr === MR && nr === NR) {
+                                    microKernel4x4(pa, pb, kc, cBase, N);
+                                } else {
+                                    microKernelEdge(pa, pb, mr, nr, kc, cBase, N);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return C;
+        }
+
+        // ============================================================
+        // WASM Loading
+        // ============================================================
+
+        async function loadWasm(url) {
+            const response = await fetch(url);
+            const bytes = await response.arrayBuffer();
+
+            // The WASM module has its own internal memory (256MB initial, grows to 2GB)
+            // We only need to provide the emscripten_notify_memory_growth callback
+            const { instance } = await WebAssembly.instantiate(bytes, {
+                env: {
+                    // Callback when WASM memory grows - just refresh any cached views
+                    emscripten_notify_memory_growth: (memIndex) => {
+                        // Memory growth happened - nothing special needed,
+                        // caller should refresh their Float64Array views
+                    }
+                }
+            });
+            return instance.exports;
+        }
+
+        // Load numwa BLAS module (Emscripten modularized build)
+        let numwaModuleInstance = null;
+        async function loadNumwaModule() {
+            if (numwaModuleInstance) return numwaModuleInstance;
+
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'numwa/blas.cjs';
+                script.onerror = () => reject(new Error('Failed to load numwa blas.cjs'));
+                script.onload = async () => {
+                    try {
+                        // createBLASModule is the factory from Emscripten MODULARIZE
+                        const module = await createBLASModule();
+                        numwaModuleInstance = {
+                            module,
+                            matmul_f64: module._matmul_f64,
+                            matmul_f64_sse: module._matmul_f64_sse,
+                            matmul_f64_native: module._matmul_f64_native,
+                            malloc_f64: module._malloc_f64,
+                            free_f64: module._free_f64,
+                            cleanup: module._cleanup,
+                            HEAPF64: module.HEAPF64
+                        };
+                        resolve(numwaModuleInstance);
+                    } catch (e) {
+                        reject(e);
+                    }
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        // Load standalone single-TU SSE module (for testing inlining hypothesis)
+        let standaloneModuleInstance = null;
+        async function loadStandaloneModule() {
+            if (standaloneModuleInstance) return standaloneModuleInstance;
+
+            const { default: createModule } = await import('./numwa/matmul_standalone.mjs');
+            const module = await createModule();
+            standaloneModuleInstance = {
+                module,
+                matmul_standalone: module._matmul_standalone,
+                malloc_f64: module._malloc_f64,
+                free_f64: module._free_f64,
+                cleanup: module._cleanup,
+                HEAPF64: module.HEAPF64
+            };
+            return standaloneModuleInstance;
+        }
+
+        // Benchmark numwa BLAS module
+        async function benchNumwaMatmul(numwa, funcName, N, A, B, rounds) {
+            const size = N * N;
+            const ptrA = numwa.malloc_f64(size);
+            const ptrB = numwa.malloc_f64(size);
+            const ptrC = numwa.malloc_f64(size);
+
+            const heap = numwa.module.HEAPF64;
+            const offsetA = ptrA / 8;
+            const offsetB = ptrB / 8;
+            const offsetC = ptrC / 8;
+
+            for (let i = 0; i < size; i++) {
+                heap[offsetA + i] = A[i];
+                heap[offsetB + i] = B[i];
+            }
+
+            const func = numwa[funcName];
+
+            // Warmup
+            func(N, N, N, ptrA, ptrB, ptrC);
+
+            // Benchmark
+            const times = [];
+            for (let i = 0; i < rounds; i++) {
+                const start = performance.now();
+                func(N, N, N, ptrA, ptrB, ptrC);
+                times.push(performance.now() - start);
+            }
+
+            const result = new Float64Array(size);
+            for (let i = 0; i < size; i++) {
+                result[i] = heap[offsetC + i];
+            }
+
+            numwa.free_f64(ptrA);
+            numwa.free_f64(ptrB);
+            numwa.free_f64(ptrC);
+
+            const avg = times.reduce((a, b) => a + b) / times.length;
+            return { avg, times, result };
+        }
+
+        // Benchmark WASM matmul
+        async function benchWasmMatmul(wasm, funcName, N, A, B, rounds) {
+            const size = N * N;
+            const ptrA = wasm.malloc_f64(size);
+            const ptrB = wasm.malloc_f64(size);
+            const ptrC = wasm.malloc_f64(size);
+
+            const heapF64 = new Float64Array(wasm.memory.buffer);
+            heapF64.set(A, ptrA / 8);
+            heapF64.set(B, ptrB / 8);
+
+            const func = wasm[funcName];
+
+            // Warmup
+            func(N, N, N, ptrA, ptrB, ptrC);
+
+            // Benchmark
+            const times = [];
+            for (let i = 0; i < rounds; i++) {
+                const start = performance.now();
+                func(N, N, N, ptrA, ptrB, ptrC);
+                times.push(performance.now() - start);
+            }
+
+            const result = new Float64Array(size);
+            result.set(heapF64.subarray(ptrC / 8, ptrC / 8 + size));
+
+            wasm.free_f64(ptrA);
+            wasm.free_f64(ptrB);
+            wasm.free_f64(ptrC);
+
+            const avg = times.reduce((a, b) => a + b) / times.length;
+            return { avg, times, result };
+        }
+
+        // Benchmark JS matmul
+        function benchJsMatmul(matmulFunc, N, A, B, rounds) {
+            // Multiple warmups to allow V8 JIT to fully optimize
+            // (interpreter → baseline → TurboFan)
+            for (let w = 0; w < 3; w++) {
+                matmulFunc(A, B, N);
+            }
+
+            // Benchmark
+            const times = [];
+            let result;
+            for (let i = 0; i < rounds; i++) {
+                const start = performance.now();
+                result = matmulFunc(A, B, N);
+                times.push(performance.now() - start);
+            }
+
+            const avg = times.reduce((a, b) => a + b) / times.length;
+            return { avg, times, result };
+        }
+
+        // Compute relative error
+        function computeError(ref, test) {
+            let sumErr = 0;
+            let count = 0;
+            const len = ref.length || ref.byteLength / 8;
+            for (let i = 0; i < len; i++) {
+                const r = ref[i];
+                const t = test[i];
+                if (Math.abs(r) > 1e-10) {
+                    sumErr += Math.abs((r - t) / r);
+                    count++;
+                }
+            }
+            return count > 0 ? sumErr / count : 0;
+        }
+
+        async function runBenchmark() {
+            clearLog();
+            const N = parseInt(document.getElementById('size').value);
+            const rounds = parseInt(document.getElementById('rounds').value);
+            const size = N * N;
+            const gflop = 2 * N * N * N / 1e9;
+
+            log('═'.repeat(75), 'highlight');
+            log('  MatMul Optimization Benchmark: JS vs WASM', 'highlight');
+            log('═'.repeat(75), 'highlight');
+            log('');
+            log(`Matrix size: ${N}×${N}`, 'info');
+            log(`FLOP per matmul: ${gflop.toFixed(2)} GFLOP`, 'info');
+            log(`Rounds: ${rounds}`, 'info');
+            log('');
+
+            // Generate random matrices
+            log('Generating random matrices...', 'info');
+            const A_f64 = new Float64Array(size);
+            const B_f64 = new Float64Array(size);
+            for (let i = 0; i < size; i++) {
+                A_f64[i] = Math.random();
+                B_f64[i] = Math.random();
+            }
+
+            // Also create number[] versions for JS naive
+            const A_arr = Array.from(A_f64);
+            const B_arr = Array.from(B_f64);
+
+            const results = [];
+
+            // ============================================================
+            // JavaScript Benchmarks
+            // ============================================================
+
+            log('');
+            log('─'.repeat(60));
+            log('JAVASCRIPT IMPLEMENTATIONS', 'highlight');
+            log('─'.repeat(60));
+
+            // 1. JS Naive with number[]
+            log('');
+            log('1. JS Naive (number[])', 'result');
+            log('   Using regular JS arrays - worst case for JIT', 'info');
+            {
+                const r = benchJsMatmul(matmulNaiveArray, N, A_arr, B_arr, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'JS number[]', time: r.avg, gflops, result: r.result });
+            }
+
+            // 2. JS Naive with Float64Array
+            log('');
+            log('2. JS Naive (Float64Array)', 'result');
+            log('   Using typed arrays - better JIT optimization', 'info');
+            {
+                const r = benchJsMatmul(matmulNaiveFloat64, N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'JS Float64Array', time: r.avg, gflops, result: r.result });
+            }
+
+            // 3. JS Cache-optimized with number[]
+            log('');
+            log('3. JS Cache-Opt (number[])', 'result');
+            log('   Loop tiling (64×64 blocks) with JS arrays', 'info');
+            {
+                const r = benchJsMatmul(matmulCacheArray, N, A_arr, B_arr, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'JS Cache number[]', time: r.avg, gflops, result: r.result });
+            }
+
+            // 4. JS Cache-optimized with Float64Array
+            log('');
+            log('4. JS Cache-Opt (Float64Array)', 'result');
+            log('   Loop tiling (64×64 blocks) with typed arrays', 'info');
+            {
+                const r = benchJsMatmul(matmulCacheFloat64, N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'JS Cache Float64', time: r.avg, gflops, result: r.result });
+            }
+
+            // 5. JS Packed DGEMM with number[]
+            log('');
+            log('5. JS Packed 4x4 (number[])', 'result');
+            log('   DGEMM-style: tiling + packing + 4x4 micro-kernel', 'info');
+            {
+                const r = benchJsMatmul(matmulPackedArray, N, A_arr, B_arr, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'JS Packed number[]', time: r.avg, gflops, result: r.result });
+            }
+
+            // 6. JS Packed DGEMM with Float64Array
+            log('');
+            log('6. JS Packed 4x4 (Float64Array)', 'result');
+            log('   DGEMM-style: tiling + packing + 4x4 micro-kernel', 'info');
+            {
+                const r = benchJsMatmul(matmulPackedFloat64, N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'JS Packed Float64', time: r.avg, gflops, result: r.result });
+            }
+
+            // ============================================================
+            // WASM Benchmarks
+            // ============================================================
+
+            log('');
+            log('─'.repeat(60));
+            log('WEBASSEMBLY IMPLEMENTATIONS', 'highlight');
+            log('─'.repeat(60));
+            log('');
+            log('Loading WASM modules...', 'info');
+
+            let wasmNaive, wasmCache, wasmSimd, wasmFull2x2, wasmFull4x4, wasmFull6x8, wasmFull8x8, wasmOpenBLAS, wasmSSE;
+
+            try {
+                wasmNaive = await loadWasm('matmul_naive.wasm');
+                log('  ✓ WASM Naive loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM Naive failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmCache = await loadWasm('matmul_cache.wasm');
+                log('  ✓ WASM Cache-optimized loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM Cache-optimized failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmSimd = await loadWasm('matmul_simd.wasm');
+                log('  ✓ WASM SIMD loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM SIMD failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmFull2x2 = await loadWasm('matmul_full_2x2.wasm');
+                log('  ✓ WASM Full 2x2 loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM Full 2x2 failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmFull4x4 = await loadWasm('matmul_full_4x4.wasm');
+                log('  ✓ WASM Full 4x4 loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM Full 4x4 failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmFull6x8 = await loadWasm('matmul_full_6x8.wasm');
+                log('  ✓ WASM Full 6x8 loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM Full 6x8 failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmFull8x8 = await loadWasm('matmul_full_8x8.wasm');
+                log('  ✓ WASM Full 8x8 loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM Full 8x8 failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmOpenBLAS = await loadWasm('matmul_openblas.wasm');
+                log('  ✓ WASM OpenBLAS-style loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM OpenBLAS-style failed: ${e.message}`, 'warn');
+            }
+
+            try {
+                wasmSSE = await loadWasm('matmul_sse.wasm');
+                log('  ✓ WASM SSE-style (pre-dup B) loaded', 'info');
+            } catch (e) {
+                log(`  ✗ WASM SSE-style failed: ${e.message}`, 'warn');
+            }
+
+            let wasmNumwa = null;
+            try {
+                // Load numwa BLAS module (Emscripten modularized build)
+                const numwaModule = await loadNumwaModule();
+                wasmNumwa = numwaModule;
+                log('  ✓ numwa BLAS (standard + SSE) loaded', 'info');
+            } catch (e) {
+                log(`  ✗ numwa BLAS failed: ${e.message}`, 'warn');
+            }
+
+            // 7. WASM Naive
+            if (wasmNaive) {
+                log('');
+                log('7. WASM Naive (triple nested loop)', 'result');
+                log('   Same algorithm as JS, compiled to WASM', 'info');
+                const r = await benchWasmMatmul(wasmNaive, 'matmul_naive', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM Naive', time: r.avg, gflops, result: r.result });
+            }
+
+            // 8. WASM Cache-optimized
+            if (wasmCache) {
+                log('');
+                log('8. WASM Cache-Optimized (loop tiling)', 'result');
+                log('   64×64 blocking for L1/L2 cache', 'info');
+                const r = await benchWasmMatmul(wasmCache, 'matmul_cache', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM Cache', time: r.avg, gflops, result: r.result });
+            }
+
+            // 9. WASM SIMD only
+            if (wasmSimd) {
+                log('');
+                log('9. WASM SIMD-Only (f64x2 vectors)', 'result');
+                log('   SIMD vectorization without cache blocking', 'info');
+                const r = await benchWasmMatmul(wasmSimd, 'matmul_simd', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`   Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`   Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM SIMD', time: r.avg, gflops, result: r.result });
+            }
+
+            // 10-13. WASM Full optimized with different micro-kernel sizes
+            log('');
+            log('─'.repeat(60));
+            log('MICRO-KERNEL SIZE COMPARISON', 'highlight');
+            log('─'.repeat(60));
+
+            if (wasmFull2x2) {
+                log('');
+                log('10. WASM Full 2x2 (cache + SIMD + packing)', 'result');
+                log('    2 accumulators per SIMD vector, low register pressure', 'info');
+                const r = await benchWasmMatmul(wasmFull2x2, 'matmul_f64_2x2', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`    Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM Full 2x2', time: r.avg, gflops, result: r.result });
+            }
+
+            if (wasmFull4x4) {
+                log('');
+                log('11. WASM Full 4x4 (cache + SIMD + packing)', 'result');
+                log('    8 f64x2 accumulators, balanced register usage', 'info');
+                const r = await benchWasmMatmul(wasmFull4x4, 'matmul_f64', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`    Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM Full 4x4', time: r.avg, gflops, result: r.result });
+            }
+
+            if (wasmFull6x8) {
+                log('');
+                log('12. WASM Full 6x8 (cache + SIMD + packing)', 'result');
+                log('    24 f64x2 accumulators, common BLAS size', 'info');
+                const r = await benchWasmMatmul(wasmFull6x8, 'matmul_f64_6x8', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`    Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM Full 6x8', time: r.avg, gflops, result: r.result });
+            }
+
+            if (wasmFull8x8) {
+                log('');
+                log('13. WASM Full 8x8 (cache + SIMD + packing)', 'result');
+                log('    32 f64x2 accumulators, may cause register spilling', 'info');
+                const r = await benchWasmMatmul(wasmFull8x8, 'matmul_f64_8x8', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`    Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM Full 8x8', time: r.avg, gflops, result: r.result });
+            }
+
+            if (wasmOpenBLAS) {
+                log('');
+                log('14. WASM OpenBLAS-style (full kernel set)', 'result');
+                log('    Port of OpenBLAS ARM64 NEON kernels to WASM SIMD', 'info');
+                const r = await benchWasmMatmul(wasmOpenBLAS, 'matmul_openblas', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`    Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM OpenBLAS', time: r.avg, gflops, result: r.result });
+            }
+
+            if (wasmSSE) {
+                log('');
+                log('15. WASM SSE-style (pre-duplicated B)', 'result');
+                log('    Pre-duplicates B during packing to avoid extract_lane+splat', 'info');
+                const r = await benchWasmMatmul(wasmSSE, 'matmul_sse', N, A_f64, B_f64, rounds);
+                const gflops = gflop / (r.avg / 1000);
+                log(`    Times: ${r.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${r.avg.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'WASM SSE-style', time: r.avg, gflops, result: r.result });
+            }
+
+            // numwa BLAS benchmarks
+            if (wasmNumwa) {
+                log('');
+                log('─'.repeat(60));
+                log('NUMWA BLAS PACKAGE', 'highlight');
+                log('─'.repeat(60));
+
+                log('');
+                log('16. numwa BLAS (standard kernel)', 'result');
+                log('    OpenBLAS-style driver with WASM SIMD micro-kernels', 'info');
+                const rStd = await benchNumwaMatmul(wasmNumwa, 'matmul_f64', N, A_f64, B_f64, rounds);
+                const gflopsStd = gflop / (rStd.avg / 1000);
+                log(`    Times: ${rStd.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${rStd.avg.toFixed(2)} ms (${gflopsStd.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'numwa Standard', time: rStd.avg, gflops: gflopsStd, result: rStd.result });
+
+                log('');
+                log('17. numwa BLAS (SSE-style kernel)', 'result');
+                log('    Pre-duplicated B packing, no extract_lane+splat', 'info');
+                const rSSE = await benchNumwaMatmul(wasmNumwa, 'matmul_f64_sse', N, A_f64, B_f64, rounds);
+                const gflopsSSE = gflop / (rSSE.avg / 1000);
+                log(`    Times: ${rSSE.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${rSSE.avg.toFixed(2)} ms (${gflopsSSE.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'numwa SSE-style', time: rSSE.avg, gflops: gflopsSSE, result: rSSE.result });
+
+                log('');
+                log('18. numwa BLAS (Native WASM kernel)', 'result');
+                log('    i8x16.shuffle for lane duplication (1 instruction vs extract+splat)', 'info');
+                const rNative = await benchNumwaMatmul(wasmNumwa, 'matmul_f64_native', N, A_f64, B_f64, rounds);
+                const gflopsNative = gflop / (rNative.avg / 1000);
+                log(`    Times: ${rNative.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${rNative.avg.toFixed(2)} ms (${gflopsNative.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'numwa Native', time: rNative.avg, gflops: gflopsNative, result: rNative.result });
+            }
+
+            // Standalone single-TU SSE (tests inlining hypothesis)
+            log('');
+            log('─'.repeat(75));
+            log('19. Standalone SSE (single-TU, full inlining)', 'result');
+            log('    Same algorithm as numwa SSE but in single file for full inlining', 'info');
+            try {
+                const standalone = await loadStandaloneModule();
+                const rStandalone = await benchNumwaMatmul(standalone, 'matmul_standalone', N, A_f64, B_f64, rounds);
+                const gflopsStandalone = gflop / (rStandalone.avg / 1000);
+                log(`    Times: ${rStandalone.times.map(t => t.toFixed(1) + 'ms').join(', ')}`);
+                log(`    Average: ${rStandalone.avg.toFixed(2)} ms (${gflopsStandalone.toFixed(2)} GFLOPS)`, 'result');
+                results.push({ name: 'Standalone SSE', time: rStandalone.avg, gflops: gflopsStandalone, result: rStandalone.result });
+            } catch (e) {
+                log(`    Error: ${e.message}`, 'warn');
+            }
+
+            // ============================================================
+            // Summary
+            // ============================================================
+
+            log('');
+            log('═'.repeat(75), 'highlight');
+            log('  SUMMARY', 'highlight');
+            log('═'.repeat(75), 'highlight');
+            log('');
+
+            if (results.length > 0) {
+                const baseline = results[0].time;
+                const best = results.reduce((a, b) => a.gflops > b.gflops ? a : b);
+
+                log('Method                Time (ms)    GFLOPS    vs JS[]    vs Best');
+                log('─'.repeat(70));
+
+                for (const r of results) {
+                    const name = r.name.padEnd(20);
+                    const time = r.time.toFixed(2).padStart(10);
+                    const gflops = r.gflops.toFixed(2).padStart(8);
+                    const vsBaseline = (baseline / r.time).toFixed(2).padStart(8) + 'x';
+                    const vsBest = (best.time / r.time).toFixed(2).padStart(8) + 'x';
+                    log(`${name} ${time}  ${gflops}  ${vsBaseline}  ${vsBest}`);
+                }
+
+                log('─'.repeat(70));
+                log('');
+
+                // Correctness check
+                if (results.length >= 2) {
+                    const ref = results[0].result;
+                    const test = results[results.length - 1].result;
+                    const err = computeError(ref, test);
+                    log(`Correctness (JS[] vs WASM Full): relative error = ${err.toExponential(2)}`,
+                        err < 1e-10 ? 'result' : 'warn');
+                }
+
+                log('');
+                log('Key insights:', 'highlight');
+
+                const jsArr = results.find(r => r.name === 'JS number[]');
+                const jsF64 = results.find(r => r.name === 'JS Float64Array');
+                const jsCacheArr = results.find(r => r.name === 'JS Cache number[]');
+                const jsCacheF64 = results.find(r => r.name === 'JS Cache Float64');
+                const jsPackedArr = results.find(r => r.name === 'JS Packed number[]');
+                const jsPackedF64 = results.find(r => r.name === 'JS Packed Float64');
+                const wasmNaiveRes = results.find(r => r.name === 'WASM Naive');
+                const wasmCacheRes = results.find(r => r.name === 'WASM Cache');
+                const wasmFull4x4Res = results.find(r => r.name === 'WASM Full 4x4');
+                const wasmFull2x2Res = results.find(r => r.name === 'WASM Full 2x2');
+
+                log('', 'info');
+                log('  JavaScript:', 'info');
+                if (jsArr && jsF64) {
+                    log(`    • Float64Array is ${(jsArr.time / jsF64.time).toFixed(2)}x faster than number[] (naive)`, 'info');
+                }
+                if (jsArr && jsCacheArr) {
+                    log(`    • Cache-opt number[] is ${(jsArr.time / jsCacheArr.time).toFixed(2)}x faster than naive number[]`, 'info');
+                }
+                if (jsCacheF64 && jsPackedF64) {
+                    log(`    • Packed Float64 is ${(jsCacheF64.time / jsPackedF64.time).toFixed(2)}x faster than Cache Float64`, 'info');
+                }
+                if (jsArr && jsPackedF64) {
+                    log(`    • Best JS (Packed F64) is ${(jsArr.time / jsPackedF64.time).toFixed(2)}x faster than worst JS (naive [])`, 'info');
+                }
+
+                log('', 'info');
+                log('  WASM vs JS:', 'info');
+                if (jsPackedF64 && wasmNaiveRes) {
+                    log(`    • WASM Naive is ${(jsPackedF64.time / wasmNaiveRes.time).toFixed(2)}x faster than JS Packed Float64`, 'info');
+                }
+                if (wasmNaiveRes && wasmCacheRes) {
+                    log(`    • WASM Cache is ${(wasmNaiveRes.time / wasmCacheRes.time).toFixed(2)}x faster than WASM Naive`, 'info');
+                }
+
+                log('', 'info');
+                log('  Micro-kernel comparison:', 'highlight');
+                const wasmFull6x8Res = results.find(r => r.name === 'WASM Full 6x8');
+                const wasmFull8x8Res = results.find(r => r.name === 'WASM Full 8x8');
+
+                const wasmOpenBLASRes = results.find(r => r.name === 'WASM OpenBLAS');
+                const wasmSSERes = results.find(r => r.name === 'WASM SSE-style');
+
+                const numwaStdRes = results.find(r => r.name === 'numwa Standard');
+                const numwaSSERes = results.find(r => r.name === 'numwa SSE-style');
+                const numwaNativeRes = results.find(r => r.name === 'numwa Native');
+                const standaloneSSERes = results.find(r => r.name === 'Standalone SSE');
+
+                const microKernels = [
+                    { name: '2x2', res: wasmFull2x2Res },
+                    { name: '4x4', res: wasmFull4x4Res },
+                    { name: '6x8', res: wasmFull6x8Res },
+                    { name: '8x8', res: wasmFull8x8Res },
+                    { name: 'OpenBLAS', res: wasmOpenBLASRes },
+                    { name: 'SSE-style', res: wasmSSERes },
+                    { name: 'numwa Std', res: numwaStdRes },
+                    { name: 'numwa SSE', res: numwaSSERes },
+                    { name: 'numwa Native', res: numwaNativeRes },
+                    { name: 'Standalone', res: standaloneSSERes }
+                ].filter(m => m.res);
+
+                if (microKernels.length > 0) {
+                    const bestMicro = microKernels.reduce((a, b) => a.res.gflops > b.res.gflops ? a : b);
+                    for (const mk of microKernels) {
+                        const marker = mk === bestMicro ? '★' : ' ';
+                        log(`   ${marker} ${mk.name}: ${mk.res.gflops.toFixed(2)} GFLOPS`, mk === bestMicro ? 'result' : 'info');
+                    }
+                    log(`    Winner: ${bestMicro.name} micro-kernel`, 'result');
+                }
+
+                log('', 'info');
+                log('  Overall:', 'result');
+                const bestWasm = microKernels.length > 0
+                    ? microKernels.reduce((a, b) => a.res.gflops > b.res.gflops ? a : b).res
+                    : null;
+                if (jsArr && bestWasm) {
+                    log(`    • Total speedup: ${(jsArr.time / bestWasm.time).toFixed(2)}x (JS number[] → ${bestWasm.name})`, 'result');
+                }
+
+                log('');
+                log(`Best: ${best.name} at ${best.gflops.toFixed(2)} GFLOPS`, 'highlight');
+            }
+        }
+    </script>
+</body>
+</html>

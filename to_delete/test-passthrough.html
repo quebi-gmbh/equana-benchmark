@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebGPU Passthrough Test</title>
+    <style>
+        body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; }
+        pre { background: #0d0d1a; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h2>WebGPU Passthrough Test</h2>
+    <button onclick="runTest()">Run Test</button>
+    <pre id="output">Click button to run test...</pre>
+
+    <script type="module">
+        function log(msg) {
+            document.getElementById('output').textContent += msg + '\n';
+        }
+
+        window.runTest = async function() {
+            document.getElementById('output').textContent = '';
+
+            // Generate random f64 and split
+            const val = Math.random();
+            const hi = Math.fround(val);
+            const lo = Math.fround(val - hi);
+
+            log('=== Before GPU ===');
+            log(`Original f64: ${val}`);
+            log(`hi (f32):     ${hi}`);
+            log(`lo (f32):     ${lo}`);
+            log(`hi + lo:      ${hi + lo}`);
+            log(`Error:        ${val - (hi + lo)}`);
+            log('');
+
+            // Check WebGPU
+            if (!navigator.gpu) {
+                log('WebGPU not available!');
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+            if (!adapter) {
+                log('No GPU adapter!');
+                return;
+            }
+
+            const device = await adapter.requestDevice();
+
+            // Create passthrough shader
+            const shaderCode = `
+                @group(0) @binding(0) var<storage, read> input: array<f32>;
+                @group(0) @binding(1) var<storage, read_write> output: array<f32>;
+
+                @compute @workgroup_size(1)
+                fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+                    let i = id.x;
+                    output[i] = input[i];
+                }
+            `;
+
+            const shaderModule = device.createShaderModule({ code: shaderCode });
+            const bindGroupLayout = device.createBindGroupLayout({
+                entries: [
+                    { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+                    { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+                ]
+            });
+
+            const pipeline = device.createComputePipeline({
+                layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+                compute: { module: shaderModule, entryPoint: 'main' }
+            });
+
+            // Create input buffer with hi and lo
+            const inputData = new Float32Array([hi, lo]);
+            const inputBuffer = device.createBuffer({
+                size: inputData.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+            });
+            device.queue.writeBuffer(inputBuffer, 0, inputData);
+
+            // Output buffer
+            const outputBuffer = device.createBuffer({
+                size: inputData.byteLength,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+            });
+
+            // Read buffer
+            const readBuffer = device.createBuffer({
+                size: inputData.byteLength,
+                usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+            });
+
+            // Run shader
+            const bindGroup = device.createBindGroup({
+                layout: bindGroupLayout,
+                entries: [
+                    { binding: 0, resource: { buffer: inputBuffer } },
+                    { binding: 1, resource: { buffer: outputBuffer } },
+                ]
+            });
+
+            const commandEncoder = device.createCommandEncoder();
+            const passEncoder = commandEncoder.beginComputePass();
+            passEncoder.setPipeline(pipeline);
+            passEncoder.setBindGroup(0, bindGroup);
+            passEncoder.dispatchWorkgroups(2);  // 2 elements
+            passEncoder.end();
+            commandEncoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, inputData.byteLength);
+            device.queue.submit([commandEncoder.finish()]);
+
+            // Read back
+            await readBuffer.mapAsync(GPUMapMode.READ);
+            const result = new Float32Array(readBuffer.getMappedRange().slice(0));
+            readBuffer.unmap();
+
+            const hi_back = result[0];
+            const lo_back = result[1];
+
+            log('=== After GPU (passthrough) ===');
+            log(`hi (f32):     ${hi_back}`);
+            log(`lo (f32):     ${lo_back}`);
+            log(`hi + lo:      ${hi_back + lo_back}`);
+            log(`Error:        ${val - (hi_back + lo_back)}`);
+            log('');
+
+            log('=== Comparison ===');
+            log(`hi changed:   ${hi !== hi_back}`);
+            log(`lo changed:   ${lo !== lo_back}`);
+            log(`hi diff:      ${hi - hi_back}`);
+            log(`lo diff:      ${lo - lo_back}`);
+
+            device.destroy();
+        };
+    </script>
+</body>
+</html>

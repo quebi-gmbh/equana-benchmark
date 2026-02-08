@@ -1,8 +1,9 @@
-import type { BenchmarkVariant, BenchmarkResult, BenchmarkAction, JsConfig, WasmConfig, MtConfig } from './types';
+import type { BenchmarkVariant, BenchmarkResult, BenchmarkAction, JsConfig, WasmConfig, MtConfig, PyodideConfig } from './types';
 import { generateMatrices } from './matrixUtils';
 import { runJsBenchmark } from './runners/jsRunner';
 import { runWasmBenchmark } from './runners/wasmRunner';
 import { runMtBenchmark } from './runners/mtRunner';
+import { runPyodideBenchmark } from './runners/pyodideRunner';
 
 function yieldToUI(): Promise<void> {
   return new Promise((resolve) => {
@@ -29,6 +30,8 @@ async function executeSingle(
       return runWasmBenchmark(variant.config as WasmConfig, N, A_f64, B_f64, rounds);
     case 'mt':
       return runMtBenchmark(variant.config as MtConfig, N, A_f64, B_f64, rounds, threadCount);
+    case 'pyodide':
+      return runPyodideBenchmark(variant.config as PyodideConfig, N, A_f64, B_f64, rounds);
   }
 }
 

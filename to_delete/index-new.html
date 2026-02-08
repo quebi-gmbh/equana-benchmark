@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WASM/WebGPU MatMul Benchmark</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #00d4ff; }
+        button {
+            background: #00d4ff;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 24px;
+            font-size: 14px;
+            cursor: pointer;
+            margin: 5px;
+            border-radius: 4px;
+        }
+        button:hover { background: #00b8e6; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        #output {
+            background: #0d0d1a;
+            border: 1px solid #333;
+            padding: 20px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .result { color: #00ff88; font-weight: bold; }
+        .warn { color: #ff6b6b; }
+        .info { color: #888; }
+        .highlight { color: #ffcc00; font-weight: bold; }
+        select, input {
+            background: #0d0d1a;
+            color: #eee;
+            border: 1px solid #333;
+            padding: 8px;
+            margin: 5px;
+        }
+        .section {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+        }
+        .section h3 { margin: 0 0 10px 0; color: #00d4ff; }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 8px;
+            text-align: right;
+        }
+        th { background: #0d0d1a; color: #00d4ff; }
+        td:first-child { text-align: left; }
+    </style>
+</head>
+<body>
+    <h1>WASM/WebGPU Matrix Multiplication Benchmark</h1>
+
+    <div class="section">
+        <h3>Settings</h3>
+        <label>Matrix Size (N×N):
+            <select id="size">
+                <option value="64">64 (quick test)</option>
+                <option value="128">128</option>
+                <option value="256">256</option>
+                <option value="500">500</option>
+                <option value="1000" selected>1000</option>
+                <option value="2000">2000</option>
+            </select>
+        </label>
+        <label>Rounds:
+            <select id="rounds">
+                <option value="1">1</option>
+                <option value="3" selected>3</option>
+                <option value="5">5</option>
+                <option value="10">10</option>
+            </select>
+        </label>
+    </div>
+
+    <div class="section">
+        <h3>WASM (f64)</h3>
+        <button id="loadBtn" onclick="loadWASM()">Load WASM Module</button>
+        <button id="wasmBtn" onclick="runWASMBenchmark()" disabled>Run WASM Benchmark</button>
+    </div>
+
+    <div class="section">
+        <h3>WebGPU</h3>
+        <button onclick="runWebGPUf32()">f32 Matmul</button>
+        <button onclick="runWebGPUSplit()">Split df64 (3× f32)</button>
+        <button onclick="runWebGPUDD64()">DD64 Atomic (double-double)</button>
+        <button onclick="checkGPU()">GPU Status</button>
+    </div>
+
+    <div class="section">
+        <h3>Accuracy Comparison</h3>
+        <button id="accuracyBtn" onclick="runAccuracyTest()" disabled>Compare All Methods</button>
+        <span class="info" style="margin-left: 10px;">Compares f32, Split df64, and DD64 against WASM f64 reference</span>
+    </div>
+
+    <div id="output"><span class="info">Click "Load WASM Module" to start...</span></div>
+
+    <script type="module">
+        import { createMatmulPipeline, runF32Matmul, runSplitMatmul, checkGPUStatus } from './webgpu-matmul.js';
+        import { createDD64MatmulPipeline, runDD64Matmul } from './webgpu-matmul-dd.js';
+        import { computeRelativeError, splitMatrixDF64, formatScientific } from './accuracy-utils.js';
+
+        let wasmModule = null;
+
+        // ============= Logging =============
+        function log(msg, cls = '') {
+            const output = document.getElementById('output');
+            if (cls) {
+                output.innerHTML += `<span class="${cls}">${msg}</span>\n`;
+            } else {
+                output.innerHTML += msg + '\n';
+            }
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('output').innerHTML = '';
+        }
+
+        // ============= WASM Functions =============
+        window.loadWASM = async function() {
+            clearLog();
+            log('Loading WASM module...', 'info');
+
+            try {
+                const { default: createMatmulModule } = await import('./matmul.mjs');
+                wasmModule = await createMatmulModule();
+                log('WASM module loaded!', 'result');
+                log('Functions: _matmul_f64, _malloc_f64, _free_f64', 'info');
+
+                document.getElementById('wasmBtn').disabled = false;
+                document.getElementById('accuracyBtn').disabled = false;
+            } catch (e) {
+                log(`Error: ${e.message}`, 'warn');
+            }
+        };
+
+        window.runWASMBenchmark = async function() {
+            if (!wasmModule) {
+                log('Load WASM module first!', 'warn');
+                return;
+            }
+
+            const N = parseInt(document.getElementById('size').value);
+            const ROUNDS = parseInt(document.getElementById('rounds').value);
+            const size = N * N;
+
+            clearLog();
+            log('=== WASM f64 Benchmark ===', 'result');
+            log(`Matrix size: ${N}×${N}`, 'info');
+            log(`FLOPS per matmul: ${(2 * N * N * N / 1e9).toFixed(2)} GFLOP`, 'info');
+            log('');
+
+            const ptrA = wasmModule._malloc_f64(size);
+            const ptrB = wasmModule._malloc_f64(size);
+            const ptrC = wasmModule._malloc_f64(size);
+
+            const heapF64 = wasmModule.HEAPF64;
+            const offsetA = ptrA / 8;
+            const offsetB = ptrB / 8;
+
+            for (let i = 0; i < size; i++) {
+                heapF64[offsetA + i] = Math.random();
+                heapF64[offsetB + i] = Math.random();
+            }
+            log('Matrices initialized', 'info');
+
+            // Warmup
+            log('Warmup...', 'info');
+            wasmModule._matmul_f64(N, N, N, ptrA, ptrB, ptrC);
+
+            // Benchmark
+            log('');
+            const times = [];
+            for (let i = 0; i < ROUNDS; i++) {
+                const start = performance.now();
+                wasmModule._matmul_f64(N, N, N, ptrA, ptrB, ptrC);
+                const elapsed = performance.now() - start;
+                times.push(elapsed);
+
+                const gflops = 2 * N * N * N / (elapsed / 1000) / 1e9;
+                log(`Round ${i + 1}: ${elapsed.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`);
+            }
+
+            const avg = times.reduce((a, b) => a + b) / times.length;
+            const avgGflops = 2 * N * N * N / (avg / 1000) / 1e9;
+            log('');
+            log(`Average: ${avg.toFixed(2)} ms (${avgGflops.toFixed(2)} GFLOPS)`, 'result');
+
+            wasmModule._free_f64(ptrA);
+            wasmModule._free_f64(ptrB);
+            wasmModule._free_f64(ptrC);
+        };
+
+        // ============= WebGPU Functions =============
+        window.runWebGPUf32 = async function() {
+            const N = parseInt(document.getElementById('size').value);
+            const ROUNDS = parseInt(document.getElementById('rounds').value);
+            const size = N * N;
+
+            clearLog();
+            log('=== WebGPU f32 Benchmark ===', 'result');
+            log(`Matrix size: ${N}×${N}`, 'info');
+            log('');
+
+            if (!navigator.gpu) {
+                log('WebGPU not supported!', 'warn');
+                return;
+            }
+
+            try {
+                const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+                if (!adapter) {
+                    log('No GPU adapter found!', 'warn');
+                    return;
+                }
+
+                const device = await adapter.requestDevice();
+                const info = adapter.info || {};
+                log(`GPU: ${info.vendor || 'Unknown'} ${info.architecture || ''}`, 'info');
+
+                const { pipeline, bindGroupLayout } = createMatmulPipeline(device, N);
+
+                // Generate random matrices
+                const A = new Float32Array(size);
+                const B = new Float32Array(size);
+                for (let i = 0; i < size; i++) {
+                    A[i] = Math.random();
+                    B[i] = Math.random();
+                }
+
+                // Warmup
+                log('Warmup (2 rounds)...', 'info');
+                await runF32Matmul(device, pipeline, bindGroupLayout, A, B, N);
+                await runF32Matmul(device, pipeline, bindGroupLayout, A, B, N);
+
+                // Benchmark
+                log('');
+                const times = [];
+                for (let i = 0; i < ROUNDS; i++) {
+                    const start = performance.now();
+                    await runF32Matmul(device, pipeline, bindGroupLayout, A, B, N);
+                    const elapsed = performance.now() - start;
+                    times.push(elapsed);
+
+                    const gflops = 2 * N * N * N / (elapsed / 1000) / 1e9;
+                    log(`Round ${i + 1}: ${elapsed.toFixed(2)} ms (${gflops.toFixed(2)} GFLOPS)`);
+                }
+
+                const avg = times.reduce((a, b) => a + b) / times.length;
+                const avgGflops = 2 * N * N * N / (avg / 1000) / 1e9;
+                log('');
+                log(`Average: ${avg.toFixed(2)} ms (${avgGflops.toFixed(2)} GFLOPS)`, 'result');
+
+                device.destroy();
+            } catch (e) {
+                log(`Error: ${e.message}`, 'warn');
+                console.error(e);
+            }
+        };
+
+        window.runWebGPUSplit = async function() {
+            const N = parseInt(document.getElementById('size').value);
+            const ROUNDS = parseInt(document.getElementById('rounds').value);
+            const size = N * N;
+
+            clearLog();
+            log('=== WebGPU Split df64 Benchmark ===', 'result');
+            log(`Matrix size: ${N}×${N}`, 'info');
+            log('Strategy: C = A.hi×B.hi + A.hi×B.lo + A.lo×B.hi', 'info');
+            log('(3 separate f32 matmuls, assembled in f64 on CPU)', 'info');
+            log('');
+
+            if (!navigator.gpu) {
+                log('WebGPU not supported!', 'warn');
+                return;
+            }
+
+            try {
+                const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+                if (!adapter) {
+                    log('No GPU adapter found!', 'warn');
+                    return;
+                }
+
+                const device = await adapter.requestDevice();
+                const info = adapter.info || {};
+                log(`GPU: ${info.vendor || 'Unknown'} ${info.architecture || ''}`, 'info');
+
+                const { pipeline, bindGroupLayout } = createMatmulPipeline(device, N);
+
+                // Generate random f64 matrices
+                const A_f64 = new Float64Array(size);
+                const B_f64 = new Float64Array(size);
+                for (let i = 0; i < size; i++) {
+                    A_f64[i] = Math.random();
+                    B_f64[i] = Math.random();
+                }
+
+                // Warmup
+                log('Warmup (2 rounds)...', 'info');
+                await runSplitMatmul(device, pipeline, bindGroupLayout, A_f64, B_f64, N);
+                await runSplitMatmul(device, pipeline, bindGroupLayout, A_f64, B_f64, N);
+
+                // Benchmark
+                log('');
+                const times = [];
+                for (let i = 0; i < ROUNDS; i++) {
+                    const start = performance.now();
+                    await runSplitMatmul(device, pipeline, bindGroupLayout, A_f64, B_f64, N);
+                    const elapsed = performance.now() - start;
+                    times.push(elapsed);
+
+                    const gflops = 2 * N * N * N / (elapsed / 1000) / 1e9;
+                    log(`Round ${i + 1}: ${elapsed.toFixed(2)} ms (${gflops.toFixed(2)} effective GFLOPS)`);
+                }
+
+                const avg = times.reduce((a, b) => a + b) / times.length;
+                const avgGflops = 2 * N * N * N / (avg / 1000) / 1e9;
+                log('');
+                log(`Average: ${avg.toFixed(2)} ms (${avgGflops.toFixed(2)} effective GFLOPS)`, 'result');
+                log('Note: Actual GPU work is 3× matmuls', 'info');
+
+                device.destroy();
+            } catch (e) {
+                log(`Error: ${e.message}`, 'warn');
+                console.error(e);
+            }
+        };
+
+        window.runWebGPUDD64 = async function() {
+            const N = parseInt(document.getElementById('size').value);
+            const ROUNDS = parseInt(document.getElementById('rounds').value);
+            const size = N * N;
+
+            clearLog();
+            log('=== WebGPU DD64 (Double-Double) Benchmark ===', 'result');
+            log(`Matrix size: ${N}×${N}`, 'info');
+            log('Strategy: Full double-double arithmetic using atomic operations', 'info');
+            log('Uses Add12, Mul12, Add22, Mul22 with atomicStore/Load to prevent fast-math', 'info');
+            log('');
+
+            if (!navigator.gpu) {
+                log('WebGPU not supported!', 'warn');
+                return;
+            }
+
+            try {
+                const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+                if (!adapter) {
+                    log('No GPU adapter found!', 'warn');
+                    return;
+                }
+
+                const device = await adapter.requestDevice();
+                const info = adapter.info || {};
+                log(`GPU: ${info.vendor || 'Unknown'} ${info.architecture || ''}`, 'info');
+
+                const { pipeline, bindGroupLayout, tileSize } = createDD64MatmulPipeline(device, N);
+                log(`Tile size: ${tileSize}×${tileSize}`, 'info');
+
+                // Generate random f64 matrices
+                const A_f64 = new Float64Array(size);
+                const B_f64 = new Float64Array(size);
+                for (let i = 0; i < size; i++) {
+                    A_f64[i] = Math.random();
+                    B_f64[i] = Math.random();
+                }
+
+                // Warmup
+                log('Warmup...', 'info');
+                await runDD64Matmul(device, pipeline, bindGroupLayout, A_f64, B_f64, N, tileSize);
+
+                // Benchmark
+                log('');
+                const times = [];
+                for (let i = 0; i < ROUNDS; i++) {
+                    const start = performance.now();
+                    await runDD64Matmul(device, pipeline, bindGroupLayout, A_f64, B_f64, N, tileSize);
+                    const elapsed = performance.now() - start;
+                    times.push(elapsed);
+
+                    const gflops = 2 * N * N * N / (elapsed / 1000) / 1e9;
+                    log(`Round ${i + 1}: ${elapsed.toFixed(2)} ms (${gflops.toFixed(2)} effective GFLOPS)`);
+                }
+
+                const avg = times.reduce((a, b) => a + b) / times.length;
+                const avgGflops = 2 * N * N * N / (avg / 1000) / 1e9;
+                log('');
+                log(`Average: ${avg.toFixed(2)} ms (${avgGflops.toFixed(2)} effective GFLOPS)`, 'result');
+                log('Note: Uses many atomic ops per element - slower but much more accurate', 'info');
+
+                device.destroy();
+            } catch (e) {
+                log(`Error: ${e.message}`, 'warn');
+                console.error(e);
+            }
+        };
+
+        window.checkGPU = async function() {
+            clearLog();
+            log('=== GPU Diagnostics ===', 'result');
+            log('');
+
+            const status = await checkGPUStatus();
+
+            if (!status.available) {
+                log(`WebGPU: NOT AVAILABLE`, 'warn');
+                log('');
+                log('To enable WebGPU in Chrome:', 'info');
+                log('  1. Go to chrome://flags', 'info');
+                log('  2. Enable "Unsafe WebGPU Support"', 'info');
+                log('  3. Enable "Vulkan"', 'info');
+                log('  4. Restart Chrome', 'info');
+                return;
+            }
+
+            log('WebGPU: AVAILABLE', 'result');
+            log('');
+
+            for (const adapter of status.adapters) {
+                log(`${adapter.type} adapter:`, 'result');
+                log(`  Vendor: ${adapter.vendor}`, 'info');
+                log(`  Device: ${adapter.device}`, 'info');
+                log(`  Architecture: ${adapter.architecture}`, 'info');
+                if (adapter.limits) {
+                    log(`  Max buffer: ${(adapter.limits.maxBufferSize / 1024 / 1024).toFixed(0)} MB`, 'info');
+                    log(`  Max workgroup: ${adapter.limits.maxWorkgroupSize}`, 'info');
+                }
+                log('');
+            }
+
+            if (status.error) {
+                log(`Error: ${status.error}`, 'warn');
+            }
+        };
+
+        // ============= Accuracy Test =============
+        window.runAccuracyTest = async function() {
+            if (!wasmModule) {
+                log('Load WASM module first!', 'warn');
+                return;
+            }
+
+            const N = parseInt(document.getElementById('size').value);
+            const size = N * N;
+
+            clearLog();
+            log('=== Accuracy Comparison ===', 'result');
+            log(`Matrix size: ${N}×${N}`, 'info');
+            log('Reference: WASM f64 matmul', 'info');
+            log('');
+
+            if (!navigator.gpu) {
+                log('WebGPU not available!', 'warn');
+                return;
+            }
+
+            try {
+                const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+                if (!adapter) {
+                    log('No GPU adapter found!', 'warn');
+                    return;
+                }
+                const device = await adapter.requestDevice();
+
+                // Generate random f64 matrices
+                log('Generating random f64 matrices...', 'info');
+                const A_f64 = new Float64Array(size);
+                const B_f64 = new Float64Array(size);
+                for (let i = 0; i < size; i++) {
+                    A_f64[i] = Math.random();
+                    B_f64[i] = Math.random();
+                }
+
+                // Results storage
+                const results = [];
+
+                // 1. WASM f64 Reference
+                log('');
+                log('Computing WASM f64 reference...', 'info');
+                const ptrA = wasmModule._malloc_f64(size);
+                const ptrB = wasmModule._malloc_f64(size);
+                const ptrC = wasmModule._malloc_f64(size);
+
+                wasmModule.HEAPF64.set(A_f64, ptrA / 8);
+                wasmModule.HEAPF64.set(B_f64, ptrB / 8);
+
+                const wasmStart = performance.now();
+                wasmModule._matmul_f64(N, N, N, ptrA, ptrB, ptrC);
+                const wasmTime = performance.now() - wasmStart;
+
+                const C_wasm = new Float64Array(size);
+                C_wasm.set(wasmModule.HEAPF64.subarray(ptrC / 8, ptrC / 8 + size));
+
+                wasmModule._free_f64(ptrA);
+                wasmModule._free_f64(ptrB);
+                wasmModule._free_f64(ptrC);
+
+                results.push({ name: 'WASM f64 (reference)', time: wasmTime, error: 0 });
+                log(`  Done: ${wasmTime.toFixed(2)} ms`, 'info');
+
+                // 2. WebGPU f32
+                log('Computing WebGPU f32...', 'info');
+                const { pipeline: pipelineF32, bindGroupLayout: layoutF32 } = createMatmulPipeline(device, N);
+
+                const A_f32 = new Float32Array(size);
+                const B_f32 = new Float32Array(size);
+                for (let i = 0; i < size; i++) {
+                    A_f32[i] = A_f64[i];
+                    B_f32[i] = B_f64[i];
+                }
+
+                const f32Start = performance.now();
+                const C_f32 = await runF32Matmul(device, pipelineF32, layoutF32, A_f32, B_f32, N);
+                const f32Time = performance.now() - f32Start;
+
+                const f32Error = computeRelativeError(C_wasm, C_f32, 1);
+                results.push({ name: 'WebGPU f32', time: f32Time, error: f32Error });
+                log(`  Done: ${f32Time.toFixed(2)} ms`, 'info');
+
+                // 3. WebGPU Split df64
+                log('Computing WebGPU Split df64...', 'info');
+                const splitStart = performance.now();
+                const C_split = await runSplitMatmul(device, pipelineF32, layoutF32, A_f64, B_f64, N);
+                const splitTime = performance.now() - splitStart;
+
+                const splitError = computeRelativeError(C_wasm, C_split, 1);
+                results.push({ name: 'WebGPU Split df64', time: splitTime, error: splitError });
+                log(`  Done: ${splitTime.toFixed(2)} ms`, 'info');
+
+                // 4. WebGPU DD64 (double-double with atomics)
+                log('Computing WebGPU DD64 (atomic double-double)...', 'info');
+                log('  (This may take longer due to atomic operations)', 'info');
+
+                const { pipeline: pipelineDD, bindGroupLayout: layoutDD, tileSize } = createDD64MatmulPipeline(device, N);
+
+                const ddStart = performance.now();
+                const C_dd = await runDD64Matmul(device, pipelineDD, layoutDD, A_f64, B_f64, N, tileSize);
+                const ddTime = performance.now() - ddStart;
+
+                const ddError = computeRelativeError(C_wasm, C_dd.f64, 1);
+                results.push({ name: 'WebGPU DD64 (atomic)', time: ddTime, error: ddError });
+                log(`  Done: ${ddTime.toFixed(2)} ms`, 'info');
+
+                // Summary Table
+                log('');
+                log('=== Results Summary ===', 'result');
+                log('');
+
+                // Helper to format improvement
+                function formatImprovement(baseErr, thisErr) {
+                    if (thisErr === 0) return '-';
+                    if (baseErr === thisErr) return '1.00x';
+                    const ratio = baseErr / thisErr;
+                    if (ratio >= 1000) {
+                        return ratio.toExponential(2) + 'x';
+                    } else if (ratio >= 1) {
+                        return ratio.toFixed(2) + 'x';
+                    } else {
+                        return ratio.toExponential(2) + 'x';
+                    }
+                }
+
+                const baseError = f32Error;
+
+                log('Method                    Time (ms)    Rel. Error      vs f32', 'info');
+                log('─'.repeat(65));
+
+                for (const r of results) {
+                    const name = r.name.padEnd(24);
+                    const time = r.time.toFixed(2).padStart(10);
+                    const err = r.error === 0 ? '(reference)'.padStart(14) : formatScientific(r.error, 2).padStart(14);
+                    const imp = r.error === 0 ? '-'.padStart(12) : formatImprovement(baseError, r.error).padStart(12);
+                    log(`${name} ${time}  ${err}  ${imp}`);
+                }
+
+                log('─'.repeat(65));
+
+                log('');
+                log('Key findings:', 'highlight');
+                const splitImp = f32Error / splitError;
+                const ddImp = f32Error / ddError;
+                log(`  • f32 error:        ${formatScientific(f32Error)}`, 'info');
+                log(`  • Split df64 error: ${formatScientific(splitError)} (${formatImprovement(f32Error, splitError)} better)`, splitImp > 10 ? 'result' : 'info');
+                log(`  • DD64 error:       ${formatScientific(ddError)} (${formatImprovement(f32Error, ddError)} better)`, ddImp > 10 ? 'result' : 'warn');
+
+                device.destroy();
+            } catch (e) {
+                log(`Error: ${e.message}`, 'warn');
+                console.error(e);
+            }
+        };
+    </script>
+</body>
+</html>

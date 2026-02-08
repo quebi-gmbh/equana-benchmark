@@ -17,12 +17,14 @@ const categoryStyles: Record<string, string> = {
   javascript: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
   wasm: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
   'wasm-mt': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  pyodide: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
 };
 
 const categoryLabels: Record<string, string> = {
   javascript: 'JS',
   wasm: 'WASM',
   'wasm-mt': 'MT',
+  pyodide: 'PY',
 };
 
 export function BenchmarkRow({

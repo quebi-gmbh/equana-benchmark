@@ -1,12 +1,22 @@
 import type { BenchmarkVariant } from './types';
 
 export const BENCHMARKS: BenchmarkVariant[] = [
+  // Pyodide (Python/NumPy via WebAssembly)
+  {
+    id: 'pyodide-numpy',
+    name: 'Pyodide NumPy',
+    category: 'pyodide',
+    description: 'NumPy A @ B via Pyodide (OpenBLAS compiled to scalar WASM)',
+    runner: 'pyodide',
+    config: { _tag: 'pyodide' },
+  },
+
   // JavaScript implementations
   {
     id: 'js-naive-array',
     name: 'JS Naive (number[])',
     category: 'javascript',
-    description: 'Baseline triple-loop — worst case for V8 JIT',
+    description: 'Baseline triple-loop',
     runner: 'js',
     config: { fn: 'naiveArray', inputType: 'array' },
   },
@@ -14,7 +24,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     id: 'js-naive-float64',
     name: 'JS Naive (Float64Array)',
     category: 'javascript',
-    description: 'Typed arrays — better JIT optimization',
+    description: 'Typed arrays',
     runner: 'js',
     config: { fn: 'naiveFloat64', inputType: 'float64' },
   },

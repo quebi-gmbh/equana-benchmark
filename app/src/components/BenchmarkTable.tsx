@@ -21,8 +21,9 @@ export function BenchmarkTable({
   const baselineResult = results[benchmarks[0]?.id ?? ''];
   const baselineAvg = baselineResult?.avg;
 
-  const stBenchmarks = benchmarks.filter((b) => b.category !== 'wasm-mt');
+  const stBenchmarks = benchmarks.filter((b) => b.category !== 'wasm-mt' && b.category !== 'pyodide');
   const mtBenchmarks = benchmarks.filter((b) => b.category === 'wasm-mt');
+  const pyodideBenchmarks = benchmarks.filter((b) => b.category === 'pyodide');
 
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-800">
@@ -40,10 +41,32 @@ export function BenchmarkTable({
           </tr>
         </thead>
         <tbody>
-          {stBenchmarks.map((variant, i) => (
+          {pyodideBenchmarks.length > 0 && (
+            <tr className="border-b border-gray-700 bg-gray-900/60">
+              <td colSpan={8} className="px-3 py-2 text-xs font-semibold tracking-wide text-purple-400 uppercase">
+                Python / Pyodide (NumPy via WebAssembly)
+              </td>
+            </tr>
+          )}
+
+          {pyodideBenchmarks.map((variant, i) => (
             <BenchmarkRow
               key={variant.id}
               index={i}
+              variant={variant}
+              result={results[variant.id]}
+              error={errors[variant.id]}
+              isRunning={runningId === variant.id}
+              isAnyRunning={isAnyRunning}
+              baselineAvg={baselineAvg}
+              onRun={() => onRunSingle(variant)}
+            />
+          ))}
+
+          {stBenchmarks.map((variant, i) => (
+            <BenchmarkRow
+              key={variant.id}
+              index={pyodideBenchmarks.length + i}
               variant={variant}
               result={results[variant.id]}
               error={errors[variant.id]}
@@ -65,7 +88,7 @@ export function BenchmarkTable({
           {mtBenchmarks.map((variant, i) => (
             <BenchmarkRow
               key={variant.id}
-              index={stBenchmarks.length + i}
+              index={pyodideBenchmarks.length + stBenchmarks.length + i}
               variant={variant}
               result={results[variant.id]}
               error={errors[variant.id]}
