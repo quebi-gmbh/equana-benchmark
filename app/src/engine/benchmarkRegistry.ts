@@ -38,6 +38,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: '64x64 loop tiling for cache locality',
     runner: 'js',
     config: { fn: 'cacheArray', inputType: 'array' },
+    maxSize: 1000,
   },
   {
     id: 'js-packed-array',
@@ -46,6 +47,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: 'DGEMM-style: 3-level blocking + packing + 4x4 micro-kernel',
     runner: 'js',
     config: { fn: 'packedArray', inputType: 'array' },
+    maxSize: 1000,
   },
 
   // WASM implementations (single-threaded)
@@ -65,6 +67,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: '64x64 cache blocking, no SIMD',
     runner: 'wasm',
     config: { wasmFile: 'matmul_cache.wasm', funcName: 'matmul_cache' },
+    maxSize: 1000,
   },
   {
     id: 'wasm-simd',
@@ -73,6 +76,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: 'f64x2 SIMD vectors without cache blocking',
     runner: 'wasm',
     config: { wasmFile: 'matmul_simd.wasm', funcName: 'matmul_simd' },
+    maxSize: 1000,
   },
   {
     id: 'wasm-full-4x4',
