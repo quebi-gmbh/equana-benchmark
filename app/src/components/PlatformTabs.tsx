@@ -18,60 +18,59 @@ export function PlatformTabs() {
 
       <TabPanel id="ubuntu" className="space-y-4">
         <p className="text-sm text-gray-400">
-          The build scripts are designed for Ubuntu/Debian. Install dependencies and compile:
+          Clone the repo and run the benchmark scripts directly:
         </p>
         <CodeBlock language="bash">{`# Install dependencies
 sudo apt update
-sudo apt install -y build-essential libopenblas-dev
+sudo apt install -y build-essential gfortran
 
 # Clone the repository
 git clone https://github.com/quebi-gmbh/equana-benchmark.git
 cd equana-benchmark/matmul-benchmarks
 
-# Compile the native benchmark
-gcc -O3 -march=native -o matmul_bench matmul_openblas.c \\
-    -lopenblas -lpthread -lm
-
-# Run
-./matmul_bench`}</CodeBlock>
-
-        <CodeBlock language="bash">{`# For the Python/NumPy benchmark
+# 1. NumPy benchmark
 pip install numpy
-python run_numpy_benchmarks.py`}</CodeBlock>
+python run_numpy_benchmarks.py
+
+# 2. Native C / OpenBLAS benchmark (builds OpenBLAS from source)
+cd native-openblas
+bash build_all.sh    # ~10 min, compiles 4 architecture variants
+bash run_benchmarks.sh
+cd ..
+
+# 3. MATLAB benchmark (requires MATLAB license)
+bash run_matlab_benchmarks.sh`}</CodeBlock>
       </TabPanel>
 
       <TabPanel id="macos" className="space-y-4">
         <p className="text-sm text-gray-400">
-          On macOS, install OpenBLAS via Homebrew and adjust the include/library paths:
+          On macOS, install dependencies via Homebrew. The NumPy and MATLAB benchmarks work out of the box.
+          The native C/OpenBLAS build compiles from source and should work on both Apple Silicon and Intel Macs.
         </p>
         <CodeBlock language="bash">{`# Install dependencies
-brew install openblas
+brew install gcc gfortran
 
 # Clone the repository
 git clone https://github.com/quebi-gmbh/equana-benchmark.git
 cd equana-benchmark/matmul-benchmarks
 
-# Compile with Homebrew OpenBLAS paths
-gcc -O3 -march=native -o matmul_bench matmul_openblas.c \\
-    -I/opt/homebrew/opt/openblas/include \\
-    -L/opt/homebrew/opt/openblas/lib \\
-    -lopenblas -lpthread -lm
-
-# On Intel Macs, use /usr/local instead of /opt/homebrew:
-# -I/usr/local/opt/openblas/include
-# -L/usr/local/opt/openblas/lib
-
-# Run
-./matmul_bench`}</CodeBlock>
-
-        <CodeBlock language="bash">{`# For the Python/NumPy benchmark
+# 1. NumPy benchmark
 pip3 install numpy
-python3 run_numpy_benchmarks.py`}</CodeBlock>
+python3 run_numpy_benchmarks.py
+
+# 2. Native C / OpenBLAS benchmark
+cd native-openblas
+bash build_all.sh
+bash run_benchmarks.sh
+cd ..
+
+# 3. MATLAB benchmark (requires MATLAB license)
+bash run_matlab_benchmarks.sh`}</CodeBlock>
       </TabPanel>
 
       <TabPanel id="windows" className="space-y-4">
         <p className="text-sm text-gray-400">
-          On Windows, use WSL2 (recommended) or MSYS2/MinGW:
+          On Windows, use WSL2 (recommended) or run individual benchmarks natively:
         </p>
 
         <h4 className="text-sm font-semibold text-gray-300">Option 1: WSL2 (Recommended)</h4>
@@ -80,22 +79,16 @@ wsl --install
 
 # Then follow the Ubuntu instructions above inside WSL2`}</CodeBlock>
 
-        <h4 className="text-sm font-semibold text-gray-300">Option 2: MSYS2 / MinGW</h4>
-        <CodeBlock language="bash">{`# Install MSYS2 from https://www.msys2.org/
-# Open MSYS2 MINGW64 terminal
+        <h4 className="text-sm font-semibold text-gray-300">Option 2: Native Python + MATLAB</h4>
+        <p className="text-sm text-gray-400">
+          The NumPy and MATLAB benchmarks can run natively on Windows. The native C/OpenBLAS build requires WSL2 or MSYS2.
+        </p>
+        <CodeBlock language="bash">{`# NumPy benchmark (works in native Windows Python)
+pip install numpy
+python run_numpy_benchmarks.py
 
-# Install dependencies
-pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-openblas
-
-# Clone and compile
-git clone https://github.com/quebi-gmbh/equana-benchmark.git
-cd equana-benchmark/matmul-benchmarks
-
-gcc -O3 -march=native -o matmul_bench.exe matmul_openblas.c \\
-    -lopenblas -lpthread
-
-# Run
-./matmul_bench.exe`}</CodeBlock>
+# MATLAB benchmark (works in native Windows MATLAB)
+matlab -batch "run_matlab_benchmarks"`}</CodeBlock>
       </TabPanel>
     </Tabs>
   );

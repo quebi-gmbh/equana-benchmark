@@ -12,7 +12,7 @@ export function DownloadsPage() {
           Downloads & Setup
         </h1>
         <p className="mt-1 text-sm text-gray-400">
-          Run native benchmarks on your own hardware for comparison with the browser results.
+          Run native DGEMM benchmarks on your own hardware for comparison with the browser results.
         </p>
       </div>
 
@@ -20,19 +20,12 @@ export function DownloadsPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-blue-400">Python / NumPy Benchmark</h2>
         <p className="text-sm text-gray-400">
-          Benchmark NumPy (backed by OpenBLAS) across different SIMD instruction sets — SSE3, SSE4.2, AVX, AVX2 —
-          both single-threaded and multi-threaded. Great for comparing against the WASM results from the browser benchmark.
+          Benchmark NumPy (backed by OpenBLAS) across four SIMD architecture targets — Scalar, SSE, AVX2, AVX-512 —
+          with 1 to 16 threads. Each combination runs in a separate subprocess with{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">OPENBLAS_CORETYPE</code> set to force
+          the SIMD target.
         </p>
         <div className="flex flex-wrap gap-3">
-          <a
-            href={`${BLOB}/matmul_benchmark.py`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
-          >
-            <DownloadIcon />
-            matmul_benchmark.py
-          </a>
           <a
             href={`${BLOB}/run_numpy_benchmarks.py`}
             target="_blank"
@@ -53,27 +46,28 @@ export function DownloadsPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-blue-400">Native C / OpenBLAS Benchmark</h2>
         <p className="text-sm text-gray-400">
-          Compile and run the matrix multiplication benchmark natively on your CPU.
-          This uses the same GotoBLAS-style algorithm as the WASM versions, but with native SIMD instructions (SSE/AVX/NEON).
+          Compiles OpenBLAS from source with four architecture-specific targets (PRESCOTT, NEHALEM, HASWELL, COOPERLAKE),
+          then runs the bundled <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">gemm.c</code> benchmark
+          harness. Produces four statically-linked DGEMM binaries.
         </p>
         <div className="flex flex-wrap gap-3">
           <a
-            href={`${BLOB}/matmul_openblas.c`}
+            href={`${BLOB}/native-openblas/build_all.sh`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
           >
             <DownloadIcon />
-            matmul_openblas.c
+            build_all.sh
           </a>
           <a
-            href={`${BLOB}/matmul.c`}
+            href={`${BLOB}/native-openblas/run_benchmarks.sh`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
           >
             <DownloadIcon />
-            matmul.c (4x4 micro-kernel)
+            run_benchmarks.sh
           </a>
           <a
             href={REPO}
@@ -85,13 +79,54 @@ export function DownloadsPage() {
             Full Repository
           </a>
         </div>
+        <div className="rounded-lg border border-gray-800 bg-gray-900/30 p-4 text-sm text-gray-400">
+          <span className="font-medium text-gray-300">Prerequisites:</span>{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">build-essential</code>,{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">gfortran</code> (for OpenBLAS compilation)
+        </div>
+      </section>
+
+      {/* MATLAB / MKL */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-blue-400">MATLAB / MKL Benchmark</h2>
+        <p className="text-sm text-gray-400">
+          Benchmarks MATLAB's <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">A * B</code> operator
+          backed by Intel MKL. MKL auto-selects the best SIMD instruction set for the CPU —{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">MKL_ENABLE_INSTRUCTIONS</code> only
+          sets an upper bound, so a single GFLOPS column is reported. The shell script launches a separate MATLAB process
+          per thread count to ensure <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">MKL_NUM_THREADS</code> takes
+          effect at library load time.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href={`${BLOB}/run_matlab_benchmarks.sh`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+          >
+            <DownloadIcon />
+            run_matlab_benchmarks.sh
+          </a>
+          <a
+            href={`${BLOB}/run_matlab_benchmarks.m`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+          >
+            <DownloadIcon />
+            run_matlab_benchmarks.m
+          </a>
+        </div>
+        <div className="rounded-lg border border-gray-800 bg-gray-900/30 p-4 text-sm text-gray-400">
+          <span className="font-medium text-gray-300">Prerequisites:</span> MATLAB R2020a+ with a valid license
+        </div>
       </section>
 
       {/* Platform Setup */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-blue-400">Build Instructions</h2>
         <p className="text-sm text-gray-400">
-          Platform-specific instructions for compiling and running the native benchmark:
+          Platform-specific instructions for cloning the repo and running all benchmarks:
         </p>
         <PlatformTabs />
       </section>

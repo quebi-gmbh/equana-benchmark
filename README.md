@@ -117,12 +117,13 @@ app/
 
 ## Native Benchmarks
 
-The app also provides download links and build instructions for running equivalent benchmarks natively:
+The `matmul-benchmarks/` directory contains reference DGEMM benchmarks for comparing browser results against native performance. All use identical methodology: 2 warmup runs + 5 timed runs measured together.
 
-- **Python/NumPy** — benchmark NumPy (OpenBLAS-backed) across SSE3, SSE4.2, AVX, AVX2
-- **C/OpenBLAS** — compile and run natively with `gcc -O3 -march=native`
+- **NumPy / OpenBLAS** — `python run_numpy_benchmarks.py` — sweeps Scalar/SSE/AVX2/AVX-512 via `OPENBLAS_CORETYPE`
+- **Native C / OpenBLAS** — `bash native-openblas/run_benchmarks.sh` — four architecture-specific OpenBLAS builds
+- **MATLAB / MKL** — `bash run_matlab_benchmarks.sh` — Intel MKL (auto-selects best SIMD target)
 
-See the Downloads page in the app for platform-specific instructions (Ubuntu, macOS, Windows/WSL2).
+See the [Downloads page](https://benchmark.equana.dev/#/downloads) in the app for full instructions, or `matmul-benchmarks/README.md` for details.
 
 ## License
 
