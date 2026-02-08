@@ -41,7 +41,7 @@ export function BenchmarkRow({
   const speedup = result && baselineAvg ? baselineAvg / result.avg : undefined;
 
   return (
-    <tr className={`border-b border-gray-800/50 transition-colors ${isRunning ? 'bg-blue-500/5' : 'hover:bg-gray-800/30'}`}>
+    <tr className={`border-b border-gray-700/40 transition-colors ${isRunning ? 'bg-blue-500/5' : 'hover:bg-gray-700/20'}`}>
       <td className="px-3 py-2.5 text-sm text-gray-500 font-mono">{index + 1}</td>
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">

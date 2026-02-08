@@ -45,7 +45,7 @@ export function BenchmarkPage() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-6 rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+      <div className="flex flex-wrap items-end gap-6 rounded-lg border border-gray-700/50 bg-gray-900/50 p-4">
         <MatrixSizePicker
           value={state.matrixSize}
           onChange={(size) => dispatch({ type: 'SET_SIZE', payload: size })}

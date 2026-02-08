@@ -26,10 +26,10 @@ export function BenchmarkTable({
   const pyodideBenchmarks = benchmarks.filter((b) => b.category === 'pyodide');
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-800">
+    <div className="overflow-x-auto rounded-lg border border-gray-700">
       <table className="w-full border-collapse">
         <thead>
-          <tr className="border-b border-gray-700 bg-gray-900/80">
+          <tr className="border-b border-gray-600/50 bg-gray-800/80">
             <th className="sticky top-0 bg-gray-900/80 px-3 py-2.5 text-left text-xs font-medium tracking-wide text-gray-400 uppercase">#</th>
             <th className="sticky top-0 bg-gray-900/80 px-3 py-2.5 text-left text-xs font-medium tracking-wide text-gray-400 uppercase">Name</th>
             <th className="sticky top-0 bg-gray-900/80 px-3 py-2.5 text-left text-xs font-medium tracking-wide text-gray-400 uppercase">Type</th>
@@ -42,7 +42,7 @@ export function BenchmarkTable({
         </thead>
         <tbody>
           {pyodideBenchmarks.length > 0 && (
-            <tr className="border-b border-gray-700 bg-gray-900/60">
+            <tr className="border-b border-gray-700 bg-gray-800/40">
               <td colSpan={8} className="px-3 py-2 text-xs font-semibold tracking-wide text-purple-400 uppercase">
                 Python / Pyodide (NumPy via WebAssembly)
               </td>
@@ -78,7 +78,7 @@ export function BenchmarkTable({
           ))}
 
           {mtBenchmarks.length > 0 && (
-            <tr className="border-b border-gray-700 bg-gray-900/60">
+            <tr className="border-b border-gray-700 bg-gray-800/40">
               <td colSpan={8} className="px-3 py-2 text-xs font-semibold tracking-wide text-emerald-400 uppercase">
                 Multi-Threaded (pthreads / SharedArrayBuffer)
               </td>

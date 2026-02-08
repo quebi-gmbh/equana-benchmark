@@ -1,10 +1,16 @@
 # Equana Benchmark
 
-In-browser matrix multiplication benchmark comparing JavaScript, WebAssembly SIMD, and multi-threaded WASM (pthreads) implementations. All benchmarks use double-precision (f64) arithmetic.
+In-browser matrix multiplication benchmark comparing JavaScript, WebAssembly SIMD, multi-threaded WASM (pthreads), and Pyodide (Python/NumPy) implementations. All benchmarks use double-precision (f64) arithmetic.
 
 **Live:** [benchmark.equana.dev](https://benchmark.equana.dev)
 
 ## Benchmark Variants
+
+### Pyodide (1)
+
+| Variant | Description |
+|---------|-------------|
+| Pyodide NumPy | NumPy A @ B via Pyodide (OpenBLAS compiled to scalar WASM) |
 
 ### JavaScript (4)
 
@@ -79,14 +85,16 @@ app/
 │   ├── engine/
 │   │   ├── types.ts                  # Core type definitions
 │   │   ├── matrixUtils.ts            # Matrix generation and GFLOPS calculation
-│   │   ├── benchmarkRegistry.ts      # All 14 benchmark variant definitions
+│   │   ├── benchmarkRegistry.ts      # All 15 benchmark variant definitions
 │   │   ├── scheduler.ts              # Sequential benchmark execution with UI yield
 │   │   ├── wasmLoader.ts             # Standalone WASM loader (fetch + instantiate)
 │   │   ├── mtLoader.ts               # Multi-threaded WASM loader (script injection)
+│   │   ├── pyodideLoader.ts          # Pyodide runtime loader (CDN script injection)
 │   │   └── runners/
 │   │       ├── jsRunner.ts           # JavaScript benchmark runner
 │   │       ├── wasmRunner.ts         # Single-threaded WASM runner
-│   │       └── mtRunner.ts           # Multi-threaded WASM runner
+│   │       ├── mtRunner.ts           # Multi-threaded WASM runner
+│   │       └── pyodideRunner.ts      # Pyodide/NumPy benchmark runner
 │   ├── matmul/
 │   │   ├── naiveArray.ts             # Triple-loop with number[]
 │   │   ├── naiveFloat64.ts           # Triple-loop with Float64Array
@@ -103,9 +111,14 @@ app/
 │   │   ├── BenchmarkRow.tsx          # Individual benchmark row
 │   │   ├── StatusBadge.tsx           # Idle/running/done/error indicator
 │   │   ├── CodeBlock.tsx             # Code display with copy button
-│   │   └── PlatformTabs.tsx          # OS-specific build instructions
+│   │   ├── PlatformTabs.tsx          # OS-specific build instructions
+│   │   ├── ReferenceResultsSection.tsx # Native benchmark reference results display
+│   │   └── ReferenceTable.tsx        # GFLOPS comparison table
+│   ├── data/
+│   │   └── referenceResults.ts       # Hardcoded native DGEMM reference results
 │   ├── hooks/
-│   │   └── useBenchmarkStore.ts      # Reducer-based state management
+│   │   ├── useBenchmarkStore.ts      # Reducer-based state management
+│   │   └── useSEO.ts                 # Dynamic document title, meta tags, and canonical URL
 │   ├── pages/
 │   │   ├── BenchmarkPage.tsx         # Main benchmark UI
 │   │   └── DownloadsPage.tsx         # Native benchmark downloads & setup
@@ -120,8 +133,10 @@ app/
 The `matmul-benchmarks/` directory contains reference DGEMM benchmarks for comparing browser results against native performance. All use identical methodology: 2 warmup runs + 5 timed runs measured together.
 
 - **NumPy / OpenBLAS** — `python run_numpy_benchmarks.py` — sweeps Scalar/SSE/AVX2/AVX-512 via `OPENBLAS_CORETYPE`
+- **Intel MKL (direct)** — `python run_mkl_benchmarks.py` — calls `cblas_dgemm` via ctypes; sweeps SIMD tiers on Intel, uses libfakeintel shim on AMD
 - **Native C / OpenBLAS** — `bash native-openblas/run_benchmarks.sh` — four architecture-specific OpenBLAS builds
 - **MATLAB / MKL** — `bash run_matlab_benchmarks.sh` — Intel MKL (auto-selects best SIMD target)
+- **Custom AVX-512 MEX** — `mex_avx512_dgemm.c` + `compile_mex_avx512.m` — AVX-512 DGEMM kernel callable from MATLAB, OpenMP multi-threaded
 
 See the [Downloads page](https://benchmark.equana.dev/#/downloads) in the app for full instructions, or `matmul-benchmarks/README.md` for details.
 

@@ -16,9 +16,9 @@ export function CodeBlock({ children, language }: CodeBlockProps) {
   };
 
   return (
-    <div className="group relative rounded-lg border border-gray-700 bg-gray-900">
+    <div className="group relative rounded-lg border border-gray-600/50 bg-gray-900">
       {language && (
-        <div className="border-b border-gray-700 px-3 py-1.5 text-xs font-medium text-gray-500">
+        <div className="border-b border-gray-600/50 px-3 py-1.5 text-xs font-medium text-gray-500">
           {language}
         </div>
       )}

@@ -7,7 +7,7 @@ const links = [
 
 export function NavBar() {
   return (
-    <nav aria-label="Main navigation" className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
+    <nav aria-label="Main navigation" className="sticky top-0 z-50 border-b border-gray-700/50 bg-gray-950/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center gap-8 px-4 py-3 sm:px-6 lg:px-8">
         <span className="text-lg font-bold tracking-tight text-blue-400">
           equana benchmark
@@ -20,8 +20,8 @@ export function NavBar() {
               className={({ isActive }) =>
                 `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-gray-800 text-blue-400'
-                    : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200'
+                    ? 'bg-blue-500/10 text-blue-400'
+                    : 'text-gray-400 hover:bg-gray-700/30 hover:text-gray-200'
                 }`
               }
             >

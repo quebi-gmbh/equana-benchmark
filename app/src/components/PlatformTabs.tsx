@@ -10,7 +10,7 @@ const tabClass = `px-4 py-2 text-sm font-medium cursor-pointer rounded-t-md tran
 export function PlatformTabs() {
   return (
     <Tabs defaultSelectedKey="ubuntu" className="space-y-4">
-      <TabList className="flex border-b border-gray-800">
+      <TabList className="flex border-b border-gray-700/50">
         <Tab id="ubuntu" className={tabClass}>Ubuntu / Debian</Tab>
         <Tab id="macos" className={tabClass}>macOS</Tab>
         <Tab id="windows" className={tabClass}>Windows</Tab>

@@ -31,7 +31,7 @@ export function ReferenceResultsSection() {
             <h3 className="text-sm font-semibold text-gray-300">
               {r.label}{' '}
               <span className="font-normal text-gray-500">
-                (OPENBLAS_NUM_THREADS={r.threadCount})
+                ({r.threadCount} {r.threadCount === 1 ? 'thread' : 'threads'})
               </span>
             </h3>
             <ReferenceTable data={r.data} />
@@ -39,7 +39,7 @@ export function ReferenceResultsSection() {
         ))}
       </div>
 
-      <div className="rounded-lg border border-gray-800 bg-gray-900/30 p-4 text-sm text-gray-400">
+      <div className="rounded-lg border border-gray-700/50 bg-gray-900/40 p-4 text-sm text-gray-400">
         <span className="font-medium text-gray-300">Architecture targets:</span>
         <ul className="mt-2 space-y-1">
           {ref.notes.map((note) => (

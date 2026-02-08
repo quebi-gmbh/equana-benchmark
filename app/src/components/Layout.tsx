@@ -10,7 +10,7 @@ export function Layout() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Outlet />
       </main>
-      <footer className="border-t border-gray-800 py-6 text-center text-sm text-gray-500">
+      <footer className="border-t border-gray-700/50 py-6 text-center text-sm text-gray-500">
         <p>
           <a
             href="https://github.com/quebi-gmbh/equana-benchmark"
