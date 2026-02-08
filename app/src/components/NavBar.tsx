@@ -7,7 +7,7 @@ const links = [
 
 export function NavBar() {
   return (
-    <nav className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
+    <nav aria-label="Main navigation" className="sticky top-0 z-50 border-b border-gray-800 bg-gray-950/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-7xl items-center gap-8 px-4 py-3 sm:px-6 lg:px-8">
         <span className="text-lg font-bold tracking-tight text-blue-400">
           equana benchmark

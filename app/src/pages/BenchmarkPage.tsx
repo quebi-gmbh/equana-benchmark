@@ -3,6 +3,7 @@ import type { BenchmarkVariant } from '../engine/types';
 import { BENCHMARKS } from '../engine/benchmarkRegistry';
 import { runSingleBenchmark, runAllBenchmarks } from '../engine/scheduler';
 import { useBenchmarkStore } from '../hooks/useBenchmarkStore';
+import { useSEO } from '../hooks/useSEO';
 import { MatrixSizePicker } from '../components/MatrixSizePicker';
 import { RoundsPicker } from '../components/RoundsPicker';
 import { ThreadCountPicker } from '../components/ThreadCountPicker';
@@ -10,6 +11,13 @@ import { RunAllButton } from '../components/RunAllButton';
 import { BenchmarkTable } from '../components/BenchmarkTable';
 
 export function BenchmarkPage() {
+  useSEO({
+    title: 'Matrix Multiplication Performance',
+    description:
+      'Compare JavaScript, WebAssembly SIMD, and multi-threaded WASM matrix multiplication performance directly in your browser using double-precision (f64) arithmetic.',
+    path: '/',
+  });
+
   const [state, dispatch] = useBenchmarkStore();
 
   const handleRunAll = useCallback(() => {

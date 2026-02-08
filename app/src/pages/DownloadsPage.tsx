@@ -1,10 +1,18 @@
 import { PlatformTabs } from '../components/PlatformTabs';
 import { ReferenceResultsSection } from '../components/ReferenceResultsSection';
+import { useSEO } from '../hooks/useSEO';
 
 const REPO = 'https://github.com/quebi-gmbh/equana-benchmark';
 const BLOB = `${REPO}/blob/main/matmul-benchmarks`;
 
 export function DownloadsPage() {
+  useSEO({
+    title: 'Downloads & Setup',
+    description:
+      'Download native DGEMM benchmark scripts for Python/NumPy, C/OpenBLAS, and MATLAB/MKL. Run matrix multiplication benchmarks on your own hardware.',
+    path: '/downloads',
+  });
+
   return (
     <div className="space-y-10">
       <div>

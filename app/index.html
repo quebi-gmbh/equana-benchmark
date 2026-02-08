@@ -5,13 +5,65 @@
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
-    <meta name="description" content="Equana Benchmark" />
+    <meta name="description" content="Browser-based matrix multiplication benchmark comparing JavaScript, WebAssembly SIMD, and multi-threaded WASM implementations with double-precision (f64) arithmetic." />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Equana Benchmark" />
+    <meta property="og:title" content="Equana Benchmark — Matrix Multiplication Performance" />
+    <meta property="og:description" content="Browser-based matrix multiplication benchmark comparing JavaScript, WebAssembly SIMD, and multi-threaded WASM implementations with double-precision (f64) arithmetic." />
+    <meta property="og:url" content="https://benchmark.equana.dev/" />
+    <meta property="og:image" content="https://benchmark.equana.dev/logo512.png" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Equana Benchmark — Matrix Multiplication Performance" />
+    <meta name="twitter:description" content="Browser-based matrix multiplication benchmark comparing JavaScript, WebAssembly SIMD, and multi-threaded WASM implementations." />
+    <meta name="twitter:image" content="https://benchmark.equana.dev/logo512.png" />
+
+    <link rel="canonical" href="https://benchmark.equana.dev/" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="apple-touch-icon" href="/logo192.png" />
     <link rel="manifest" href="/manifest.json" />
-    <title>Equana Benchmark</title>
+    <title>Equana Benchmark — Matrix Multiplication Performance</title>
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Equana Benchmark",
+      "url": "https://benchmark.equana.dev",
+      "description": "Browser-based matrix multiplication benchmark comparing JavaScript, WebAssembly SIMD, and multi-threaded WASM implementations with double-precision arithmetic.",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Any (browser-based)",
+      "browserRequirements": "Requires SharedArrayBuffer support (Chrome, Firefox, Edge)",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Quebi GmbH",
+        "url": "https://github.com/quebi-gmbh"
+      }
+    }
+    </script>
+
+    <!-- GitHub Pages SPA redirect decoder -->
+    <script>
+      (function () {
+        var redirect = sessionStorage.redirect;
+        delete sessionStorage.redirect;
+        if (redirect && redirect !== location.href) {
+          history.replaceState(null, '', redirect);
+        }
+      })();
+    </script>
   </head>
   <body>
     <script src="/coi-serviceworker.js"></script>
