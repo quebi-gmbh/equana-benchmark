@@ -1,1 +1,7 @@
 .pnpm-store
+__pycache__
+*.log
+*.mex*
+*.a
+*.goto
+bin

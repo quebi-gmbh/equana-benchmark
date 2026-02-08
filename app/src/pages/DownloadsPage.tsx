@@ -50,6 +50,34 @@ export function DownloadsPage() {
         </div>
       </section>
 
+      {/* Python / MKL (direct ctypes) */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-blue-400">Python / MKL Benchmark</h2>
+        <p className="text-sm text-gray-400">
+          Calls Intel MKL's <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">cblas_dgemm</code> directly
+          via <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">ctypes</code> — no NumPy dependency,
+          no backend ambiguity. MKL auto-selects its SIMD instruction set. On Intel CPUs, the script
+          attempts to sweep SIMD tiers via{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">MKL_ENABLE_INSTRUCTIONS</code>.
+          On AMD CPUs, MKL locks to AVX2 regardless, so a single GFLOPS column is reported.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href={`${BLOB}/run_mkl_benchmarks.py`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+          >
+            <DownloadIcon />
+            run_mkl_benchmarks.py
+          </a>
+        </div>
+        <div className="rounded-lg border border-gray-800 bg-gray-900/30 p-4 text-sm text-gray-400">
+          <span className="font-medium text-gray-300">Prerequisites:</span> Python 3.8+, Intel MKL runtime (
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">pip install mkl</code>)
+        </div>
+      </section>
+
       {/* Native C / OpenBLAS */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-blue-400">Native C / OpenBLAS Benchmark</h2>
@@ -105,6 +133,28 @@ export function DownloadsPage() {
           per thread count to ensure <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">MKL_NUM_THREADS</code> takes
           effect at library load time.
         </p>
+        <div className="rounded-lg border border-gray-700 bg-gray-800/30 px-4 py-3 text-sm text-gray-400 space-y-2">
+          <p>
+            <span className="font-medium text-gray-300">MKL on AMD (AVX2):</span>{' '}
+            Intel MKL deliberately disables AVX-512 on non-Intel CPUs. On AMD Zen 4/5,
+            MKL performance is limited to AVX2 levels (~79 GFLOPS single-threaded at large sizes vs ~139 GFLOPS
+            for OpenBLAS AVX-512). Results are reported in the AVX2 column.
+          </p>
+          <p>
+            <span className="font-medium text-gray-300">Small-matrix overhead:</span>{' '}
+            MATLAB shows unusually low GFLOPS for small matrices (e.g. 4.5–5.2 at N=64). This is likely
+            caused by MATLAB interpreter/runtime overhead, where the overhead dominates the actual computation time.
+          </p>
+        </div>
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+          <p className="text-sm text-amber-400">
+            <span className="font-semibold">Note for MATLAB users:</span>{' '}
+            MATLAB's built-in <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-amber-300">A * B</code> (backed
+            by MKL) falls significantly short of NumPy/OpenBLAS, especially on AMD CPUs where MKL is limited to
+            AVX2. Approaching OpenBLAS AVX-512 throughput requires a custom MEX kernel with explicit AVX-512
+            intrinsics — see the section below.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-3">
           <a
             href={`${BLOB}/run_matlab_benchmarks.sh`}
@@ -127,6 +177,51 @@ export function DownloadsPage() {
         </div>
         <div className="rounded-lg border border-gray-800 bg-gray-900/30 p-4 text-sm text-gray-400">
           <span className="font-medium text-gray-300">Prerequisites:</span> MATLAB R2020a+ with a valid license
+        </div>
+      </section>
+
+      {/* MATLAB / Custom AVX-512 MEX */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-blue-400">MATLAB / Custom AVX-512 MEX Kernel</h2>
+        <p className="text-sm text-gray-400">
+          A custom DGEMM MEX kernel using explicit AVX-512 intrinsics, compiled and called from MATLAB.
+          The kernel was AI-generated based on the OpenBLAS SkylakeX micro-kernel reference and uses OpenMP
+          for multi-threading via{' '}
+          <code className="rounded bg-gray-800 px-1.5 py-0.5 text-xs text-gray-300">OMP_NUM_THREADS</code>.
+          The shell script automatically compiles the MEX file if the source is present.
+        </p>
+        <div className="rounded-lg border border-gray-700 bg-gray-800/30 px-4 py-3 text-sm text-gray-400 space-y-2">
+          <p>
+            <span className="font-medium text-gray-300">Multi-threading:</span>{' '}
+            Uses 2D partitioning across M and N dimensions with zero-barrier synchronization.
+            Multi-threaded scaling is reasonable for large matrices but still trails OpenBLAS at
+            some sizes, likely due to redundant A-packing across threads sharing the same M-range
+            and the lack of a persistent thread pool (OpenMP fork/join per GEMM call).
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href={`${BLOB}/mex_avx512_dgemm.c`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+          >
+            <DownloadIcon />
+            mex_avx512_dgemm.c
+          </a>
+          <a
+            href={`${BLOB}/compile_mex_avx512.m`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+          >
+            <DownloadIcon />
+            compile_mex_avx512.m
+          </a>
+        </div>
+        <div className="rounded-lg border border-gray-800 bg-gray-900/30 p-4 text-sm text-gray-400">
+          <span className="font-medium text-gray-300">Prerequisites:</span> MATLAB R2020a+ with a valid license,
+          GCC with AVX-512 support, OpenMP runtime
         </div>
       </section>
 

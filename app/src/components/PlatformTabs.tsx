@@ -28,17 +28,21 @@ sudo apt install -y build-essential gfortran
 git clone https://github.com/quebi-gmbh/equana-benchmark.git
 cd equana-benchmark/matmul-benchmarks
 
-# 1. NumPy benchmark
+# 1. NumPy/OpenBLAS benchmark
 pip install numpy
 python run_numpy_benchmarks.py
 
-# 2. Native C / OpenBLAS benchmark (builds OpenBLAS from source)
+# 2. MKL benchmark (direct ctypes, no NumPy needed)
+pip install mkl
+python run_mkl_benchmarks.py
+
+# 3. Native C / OpenBLAS benchmark (builds OpenBLAS from source)
 cd native-openblas
 bash build_all.sh    # ~10 min, compiles 4 architecture variants
 bash run_benchmarks.sh
 cd ..
 
-# 3. MATLAB benchmark (requires MATLAB license)
+# 4. MATLAB benchmark (requires MATLAB license)
 bash run_matlab_benchmarks.sh`}</CodeBlock>
       </TabPanel>
 
@@ -54,7 +58,7 @@ brew install gcc gfortran
 git clone https://github.com/quebi-gmbh/equana-benchmark.git
 cd equana-benchmark/matmul-benchmarks
 
-# 1. NumPy benchmark
+# 1. NumPy/OpenBLAS benchmark
 pip3 install numpy
 python3 run_numpy_benchmarks.py
 
@@ -83,9 +87,13 @@ wsl --install
         <p className="text-sm text-gray-400">
           The NumPy and MATLAB benchmarks can run natively on Windows. The native C/OpenBLAS build requires WSL2 or MSYS2.
         </p>
-        <CodeBlock language="bash">{`# NumPy benchmark (works in native Windows Python)
+        <CodeBlock language="bash">{`# NumPy/OpenBLAS benchmark (works in native Windows Python)
 pip install numpy
 python run_numpy_benchmarks.py
+
+# MKL benchmark (works in native Windows Python)
+pip install mkl
+python run_mkl_benchmarks.py
 
 # MATLAB benchmark (works in native Windows MATLAB)
 matlab -batch "run_matlab_benchmarks"`}</CodeBlock>

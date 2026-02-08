@@ -8,11 +8,12 @@ export function ReferenceResultsSection() {
     <section className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-blue-400">
-          Reference Results: NumPy vs Native OpenBLAS vs MATLAB/MKL DGEMM
+          Reference Results: NumPy vs Native OpenBLAS vs MATLAB/MKL vs Custom MEX DGEMM
         </h2>
         <p className="mt-1 text-sm text-gray-400">
-          NumPy (OpenBLAS-backed), native C/OpenBLAS, and MATLAB/MKL DGEMM performance across SIMD targets,
-          measured on an {ref.hardware}. MATLAB/MKL results shown in the AVX-512 column only (MKL auto-selects SIMD target).
+          DGEMM performance across SIMD targets measured on an {ref.hardware}.
+          MATLAB and MKL results are shown in the AVX2 column — MKL disables AVX-512
+          on non-Intel CPUs. The AVX-512 MEX column shows an AI-generated DGEMM kernel using explicit AVX-512 intrinsics with OpenMP threading.
         </p>
       </div>
 
