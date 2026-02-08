@@ -27,6 +27,8 @@ export interface BenchmarkVariant {
   description: string;
   runner: RunnerType;
   config: JsConfig | WasmConfig | MtConfig | PyodideConfig;
+  /** Maximum matrix size this variant supports. Omit for no limit. */
+  maxSize?: number;
 }
 
 export interface BenchmarkResult {

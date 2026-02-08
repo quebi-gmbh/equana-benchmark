@@ -1,6 +1,6 @@
 import { RadioGroup, Radio, Label } from 'react-aria-components';
 
-const SIZES = [128, 256, 512, 750, 1000, 1500, 2000] as const;
+const SIZES = [128, 256, 512, 750, 1000, 1500, 2000, 4000] as const;
 
 interface MatrixSizePickerProps {
   value: number;

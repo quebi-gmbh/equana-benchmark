@@ -9,6 +9,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: 'NumPy A @ B via Pyodide (OpenBLAS compiled to scalar WASM)',
     runner: 'pyodide',
     config: { _tag: 'pyodide' },
+    maxSize: 1000,
   },
 
   // JavaScript implementations
@@ -19,6 +20,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: 'Baseline triple-loop',
     runner: 'js',
     config: { fn: 'naiveArray', inputType: 'array' },
+    maxSize: 1000,
   },
   {
     id: 'js-naive-float64',
@@ -27,6 +29,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: 'Typed arrays',
     runner: 'js',
     config: { fn: 'naiveFloat64', inputType: 'float64' },
+    maxSize: 1000,
   },
   {
     id: 'js-cache-array',
@@ -53,6 +56,7 @@ export const BENCHMARKS: BenchmarkVariant[] = [
     description: 'Triple-loop compiled to WebAssembly',
     runner: 'wasm',
     config: { wasmFile: 'matmul_naive.wasm', funcName: 'matmul_naive' },
+    maxSize: 1000,
   },
   {
     id: 'wasm-cache',

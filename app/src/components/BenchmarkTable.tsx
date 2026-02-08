@@ -3,6 +3,7 @@ import { BenchmarkRow } from './BenchmarkRow';
 
 interface BenchmarkTableProps {
   benchmarks: BenchmarkVariant[];
+  matrixSize: number;
   results: Record<string, BenchmarkResult>;
   errors: Record<string, string>;
   runningId: string | null;
@@ -12,6 +13,7 @@ interface BenchmarkTableProps {
 
 export function BenchmarkTable({
   benchmarks,
+  matrixSize,
   results,
   errors,
   runningId,
@@ -58,6 +60,7 @@ export function BenchmarkTable({
               error={errors[variant.id]}
               isRunning={runningId === variant.id}
               isAnyRunning={isAnyRunning}
+              isSizeDisabled={!!variant.maxSize && matrixSize > variant.maxSize}
               baselineAvg={baselineAvg}
               onRun={() => onRunSingle(variant)}
             />
@@ -72,6 +75,7 @@ export function BenchmarkTable({
               error={errors[variant.id]}
               isRunning={runningId === variant.id}
               isAnyRunning={isAnyRunning}
+              isSizeDisabled={!!variant.maxSize && matrixSize > variant.maxSize}
               baselineAvg={baselineAvg}
               onRun={() => onRunSingle(variant)}
             />
@@ -94,6 +98,7 @@ export function BenchmarkTable({
               error={errors[variant.id]}
               isRunning={runningId === variant.id}
               isAnyRunning={isAnyRunning}
+              isSizeDisabled={!!variant.maxSize && matrixSize > variant.maxSize}
               baselineAvg={baselineAvg}
               onRun={() => onRunSingle(variant)}
             />

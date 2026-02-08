@@ -9,6 +9,7 @@ interface BenchmarkRowProps {
   error: string | undefined;
   isRunning: boolean;
   isAnyRunning: boolean;
+  isSizeDisabled: boolean;
   baselineAvg: number | undefined;
   onRun: () => void;
 }
@@ -34,14 +35,15 @@ export function BenchmarkRow({
   error,
   isRunning,
   isAnyRunning,
+  isSizeDisabled,
   baselineAvg,
   onRun,
 }: BenchmarkRowProps) {
-  const status = isRunning ? 'running' : error ? 'error' : result ? 'done' : 'idle';
-  const speedup = result && baselineAvg ? baselineAvg / result.avg : undefined;
+  const status = isSizeDisabled ? 'idle' : isRunning ? 'running' : error ? 'error' : result ? 'done' : 'idle';
+  const speedup = result && !isSizeDisabled && baselineAvg ? baselineAvg / result.avg : undefined;
 
   return (
-    <tr className={`border-b border-gray-700/40 transition-colors ${isRunning ? 'bg-blue-500/5' : 'hover:bg-gray-700/20'}`}>
+    <tr className={`border-b border-gray-700/40 transition-colors ${isSizeDisabled ? 'opacity-40' : isRunning ? 'bg-blue-500/5' : 'hover:bg-gray-700/20'}`}>
       <td className="px-3 py-2.5 text-sm text-gray-500 font-mono">{index + 1}</td>
       <td className="px-3 py-2.5">
         <div className="flex items-center gap-2">
@@ -58,10 +60,10 @@ export function BenchmarkRow({
         {variant.description}
       </td>
       <td className={`px-3 py-2.5 text-sm font-mono tabular-nums text-right ${isRunning ? 'animate-pulse text-blue-400' : 'text-gray-200'}`}>
-        {isRunning ? '...' : result ? result.avg.toFixed(2) : error ? '—' : ''}
+        {isSizeDisabled ? '' : isRunning ? '...' : result ? result.avg.toFixed(2) : error ? '—' : ''}
       </td>
       <td className="px-3 py-2.5 text-sm font-mono tabular-nums text-right text-gray-200">
-        {result ? result.gflops.toFixed(2) : ''}
+        {isSizeDisabled ? '' : result ? result.gflops.toFixed(2) : ''}
       </td>
       <td className="px-3 py-2.5 text-sm font-mono tabular-nums text-right">
         {speedup !== undefined ? (
@@ -71,7 +73,9 @@ export function BenchmarkRow({
         ) : ''}
       </td>
       <td className="px-3 py-2.5">
-        {error ? (
+        {isSizeDisabled ? (
+          <span className="text-xs text-gray-600">N &gt; {variant.maxSize}</span>
+        ) : error ? (
           <span className="text-xs text-red-400 truncate max-w-[120px] inline-block" title={error}>
             {error}
           </span>

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { BenchmarkVariant } from '../engine/types';
 import { BENCHMARKS } from '../engine/benchmarkRegistry';
 import { runSingleBenchmark, runAllBenchmarks } from '../engine/scheduler';
@@ -20,9 +20,14 @@ export function BenchmarkPage() {
 
   const [state, dispatch] = useBenchmarkStore();
 
+  const runnableBenchmarks = useMemo(
+    () => BENCHMARKS.filter((b) => !b.maxSize || state.matrixSize <= b.maxSize),
+    [state.matrixSize],
+  );
+
   const handleRunAll = useCallback(() => {
-    void runAllBenchmarks(BENCHMARKS, state.matrixSize, state.rounds, state.threadCount, dispatch);
-  }, [state.matrixSize, state.rounds, state.threadCount, dispatch]);
+    void runAllBenchmarks(runnableBenchmarks, state.matrixSize, state.rounds, state.threadCount, dispatch);
+  }, [runnableBenchmarks, state.matrixSize, state.rounds, state.threadCount, dispatch]);
 
   const handleRunSingle = useCallback(
     (variant: BenchmarkVariant) => {
@@ -66,13 +71,14 @@ export function BenchmarkPage() {
           <RunAllButton
             onPress={handleRunAll}
             isRunning={state.globalRunning}
-            progress={state.globalRunning ? { current: completedCount, total: BENCHMARKS.length } : undefined}
+            progress={state.globalRunning ? { current: completedCount, total: runnableBenchmarks.length } : undefined}
           />
         </div>
       </div>
 
       <BenchmarkTable
         benchmarks={BENCHMARKS}
+        matrixSize={state.matrixSize}
         results={state.results}
         errors={state.errors}
         runningId={state.runningId}
