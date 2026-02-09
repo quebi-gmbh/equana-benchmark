@@ -84,15 +84,7 @@ pip install mkl
 python run_mkl_benchmarks.py
 ```
 
-On Intel CPUs, sweeps SIMD upper bounds via `MKL_ENABLE_INSTRUCTIONS`:
-
-| Column | MKL_ENABLE_INSTRUCTIONS | SIMD Level |
-|--------|------------------------|------------|
-| SSE4.2 | SSE4_2 | At most SSE4.2 |
-| AVX2 | AVX2 | At most AVX2 + FMA |
-| AVX-512 | AVX512 | At most AVX-512 |
-
-On AMD CPUs, `MKL_ENABLE_INSTRUCTIONS` has no effect — MKL auto-selects one code path regardless. A `libfakeintel.so` shim is built automatically to bypass MKL's Intel-only CPU check, but only a single GFLOPS column is reported.
+MKL auto-selects its SIMD code path internally — in practice it uses AVX2 regardless, so a single GFLOPS column is reported.
 
 ### 5. Custom AVX-512 MEX Kernel
 
@@ -118,7 +110,7 @@ The shell script `run_matlab_benchmarks.sh` automatically compiles the MEX kerne
 ```
 matmul-benchmarks/
 ├── run_numpy_benchmarks.py          # NumPy benchmark (4 arch × 7 sizes × 5 threads)
-├── run_mkl_benchmarks.py            # Intel MKL benchmark (direct ctypes, SIMD sweep)
+├── run_mkl_benchmarks.py            # Intel MKL benchmark (direct ctypes)
 ├── run_matlab_benchmarks.sh         # MATLAB + MEX benchmark (shell wrapper, separate processes)
 ├── run_matlab_benchmarks.m          # MATLAB benchmark (single-session quick test)
 ├── compile_mex_avx512.m             # Compile AVX-512 MEX kernel (GCC + OpenMP)

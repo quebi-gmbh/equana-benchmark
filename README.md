@@ -103,7 +103,7 @@ app/
 │   ├── components/
 │   │   ├── Layout.tsx                # App shell with nav and footer
 │   │   ├── NavBar.tsx                # Navigation links
-│   │   ├── MatrixSizePicker.tsx      # Matrix size selector (128–2000)
+│   │   ├── MatrixSizePicker.tsx      # Matrix size selector (128–4000)
 │   │   ├── RoundsPicker.tsx          # Benchmark rounds selector (1/3/5)
 │   │   ├── ThreadCountPicker.tsx     # Thread count selector (1–32)
 │   │   ├── RunAllButton.tsx          # Run all benchmarks with progress
@@ -133,7 +133,7 @@ app/
 The `matmul-benchmarks/` directory contains reference DGEMM benchmarks for comparing browser results against native performance. All use identical methodology: 2 warmup runs + 5 timed runs measured together.
 
 - **NumPy / OpenBLAS** — `python run_numpy_benchmarks.py` — sweeps Scalar/SSE/AVX2/AVX-512 via `OPENBLAS_CORETYPE`
-- **Intel MKL (direct)** — `python run_mkl_benchmarks.py` — calls `cblas_dgemm` via ctypes; sweeps SIMD tiers on Intel, uses libfakeintel shim on AMD
+- **Intel MKL (direct)** — `python run_mkl_benchmarks.py` — calls `cblas_dgemm` via ctypes; MKL auto-selects AVX2
 - **Native C / OpenBLAS** — `bash native-openblas/run_benchmarks.sh` — four architecture-specific OpenBLAS builds
 - **MATLAB / MKL** — `bash run_matlab_benchmarks.sh` — Intel MKL (auto-selects best SIMD target)
 - **Custom AVX-512 MEX** — `mex_avx512_dgemm.c` + `compile_mex_avx512.m` — AVX-512 DGEMM kernel callable from MATLAB, OpenMP multi-threaded
